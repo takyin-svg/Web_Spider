@@ -1,0 +1,54 @@
+name: Web_Spider
+
+on:
+  schedule:
+    # 每天晚上 23:00 HKT (UTC 15:00) -> 運行至 02:00
+    - cron: '0 15 * * *'
+    # 週一至五早上 06:00 HKT (UTC 前一日 22:00) -> 運行至 10:00
+    - cron: '0 22 * * 0-4'
+    # 週一至五盤中 10:30 HKT (UTC 02:30) -> 運行至 14:00
+    - cron: '30 2 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run_monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -q -r requirements.txt
+          patchright install --with-deps chromium
+
+      - name: Run News Monitor
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          PYTHONUNBUFFERED: "1"    # 強制讓 Python 即時吐出所有日誌，絕不卡頓！
+        run: python main.py
+
+      # 自動保存 history.json 供下次排程使用
+      - name: Commit history state
+        if: always()
+        run: |
+          mkdir -p data
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          touch data/history.json
+          git add data/history.json
+          git commit -m "chore: auto-update scraped state [skip ci]" || true
+          git push || true
