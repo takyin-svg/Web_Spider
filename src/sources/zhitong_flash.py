@@ -1,12 +1,9 @@
 # src/sources/zhitong_flash.py
-import logging
 import re
 from datetime import datetime
 from scrapling.fetchers import DynamicSession
 from src.config import ZHITONG_FLASH_URL, HKT
 from src.sources.base import BaseSource
-
-logger = logging.getLogger("ZhitongFlash")
 
 class ZhitongFlashSource(BaseSource):
     def __init__(self):
@@ -22,105 +19,125 @@ class ZhitongFlashSource(BaseSource):
     def fetch(self, cutoff_timestamp: int, state_manager) -> list[dict]:
         results = []
 
-        with DynamicSession(headless=True, stealth=True, timeout=60000) as sess:
-            # 1. 抓取首頁 SSR 渲染的最新 20 條
-            res = sess.fetch(ZHITONG_FLASH_URL, wait_selector="div.allday-item-content")
-            today_str = datetime.now(HKT).strftime('%Y-%m-%d')
-            hit_existing_history = False
+        def page_action_handler(page):
+            # 攔截圖片與非核心腳本，確保秒級載入
+            page.route("**/*.{png,jpg,jpeg,gif,webp,svg,css,woff,woff2}", lambda route: route.abort())
+            
+            try:
+                page.wait_for_selector("div.allday-item-content", timeout=15000)
+            except Exception:
+                return
 
-            for el in res.css("div.allday-item"):
-                raw_id = str(el.attrib.get("id", "")).replace("immediately_id_", "").strip()
-                content_nodes = el.css("div.allday-item-content")
-                if not content_nodes or not raw_id:
-                    continue
+            cursor = page.evaluate("""() => {
+                const box = document.querySelector('div.allday-box');
+                return box ? box.getAttribute('data-page') : null;
+            }""")
 
-                # 🌟 核心增量判斷 1: 如果首頁的這條快訊上次已經抓過，說明這條之後的全是舊消息
-                if state_manager.is_news_scanned(raw_id):
-                    hit_existing_history = True
+            # 追溯歷史快訊 (利用官方 window.GET 原生調用)
+            for round_idx in range(4):
+                if not cursor:
+                    break
+                    
+                batch = page.evaluate(f"""async () => {{
+                    try {{
+                        const res = await window.GET("/immediately/content-list.html?type=ganggu", {{
+                            last_update_time: "{cursor}"
+                        }});
+                        if (res && res[1] && res[1].list) {{
+                            return res[1].list;
+                        }}
+                    }} catch (e) {{}}
+                    return [];
+                }}""")
+
+                if not batch:
                     break
 
-                # 提取時間
-                time_nodes = el.css("div.allday-item-time")
-                pub_time_str = ""
-                if time_nodes:
-                    node_text = "".join(time_nodes[0].xpath(".//text()").getall()).strip()
-                    time_match = re.search(r'\d{2}:\d{2}:\d{2}', node_text)
-                    if time_match:
-                        pub_time_str = f"{today_str} {time_match.group(0)}"
+                stop_loading = False
+                for item in batch:
+                    f_id = str(item.get("immediately_id", "")).strip()
+                    c_time = int(item.get("create_time", 0))
 
-                # 標題與內文分離
-                bold_nodes = content_nodes[0].css("b, strong")
-                raw_text = "".join(content_nodes[0].xpath(".//text()").getall()).strip()
-                if bold_nodes:
-                    bold_text = "".join(bold_nodes[0].xpath(".//text()").getall()).strip()
-                    body_text = raw_text.replace(bold_text, "").replace("编辑解读", "").replace("添加解读", "").strip()
-                    title = bold_text
-                    body = body_text
-                else:
-                    title, body = self._split_title_and_content(raw_text)
-
-                if len(title) >= 5 or len(body) > 15:
-                    results.append({
-                        "unique_id": raw_id,
-                        "title": title,
-                        "content": body,
-                        "source": self.name,
-                        "link": f"{ZHITONG_FLASH_URL}#flash_{raw_id}",
-                        "time": pub_time_str
-                    })
-                    state_manager.add_scanned(raw_id)
-
-            # 2. 如果首頁 20 條中完全沒有遇到任何舊新聞，才需要透過 JS 繼續往後翻歷史頁面
-            if not hit_existing_history:
-                cursor = res.attrib.get("data-page") or ""
-                # 最多追溯 4 輪
-                for round_idx in range(4):
-                    if not cursor:
+                    # 時間戳判斷與碰頭去重
+                    if c_time <= cutoff_timestamp:
+                        stop_loading = True
                         break
+
+                    if not f_id or state_manager.is_news_scanned(f_id):
+                        continue
+
+                    raw_content = item.get("content", "")
+                    clean_content = re.sub(r'<[^>]+>', '', raw_content).strip()
+
+                    if len(clean_content) > 15:
+                        title, body = self._split_title_and_content(clean_content)
+                        time_str = datetime.fromtimestamp(c_time, HKT).strftime('%Y-%m-%d %H:%M:%S') if c_time else ""
                         
-                    batch = sess.page_evaluate(f"""async () => {{
-                        try {{
-                            const res = await window.GET("/immediately/content-list.html?type=ganggu", {{
-                                last_update_time: "{cursor}"
-                            }});
-                            if (res && res[1] && res[1].list) {{
-                                return res[1].list;
-                            }}
-                        }} catch (e) {{}}
-                        return [];
-                    }}""")
+                        results.append({
+                            "unique_id": f_id,
+                            "title": title,
+                            "content": body,
+                            "source": self.name,
+                            "link": f"{ZHITONG_FLASH_URL}#flash_{f_id}",
+                            "time": time_str
+                        })
+                        state_manager.add_scanned(f_id)
 
-                    if not batch:
-                        break
+                if stop_loading:
+                    break
 
-                    stop_backward = False
-                    for item in batch:
-                        f_id = str(item.get("immediately_id", "")).strip()
-                        c_time = int(item.get("create_time", 0))
+                cursor = str(batch[-1].get("create_time"))
 
-                        # 🌟 觸達時間下限 或 碰到已抓記錄 -> 停止
-                        if c_time <= cutoff_timestamp or state_manager.is_news_scanned(f_id):
-                            stop_backward = True
-                            break
+        try:
+            with DynamicSession(headless=True, stealth=True, timeout=30000) as sess:
+                res = sess.fetch(
+                    ZHITONG_FLASH_URL,
+                    wait_until="domcontentloaded",
+                    wait_selector="div.allday-item-content",
+                    page_action=page_action_handler
+                )
 
-                        raw_content = item.get("content", "")
-                        clean_content = re.sub(r'<[^>]+>', '', raw_content).strip()
+                # 補錄首頁 SSR 渲染的最新資料
+                today_str = datetime.now(HKT).strftime('%Y-%m-%d')
+                for el in res.css("div.allday-item"):
+                    raw_id = str(el.attrib.get("id", "")).replace("immediately_id_", "").strip()
+                    content_nodes = el.css("div.allday-item-content")
+                    if not content_nodes or not raw_id:
+                        continue
 
-                        if len(clean_content) > 15:
-                            title, body = self._split_title_and_content(clean_content)
-                            time_str = datetime.fromtimestamp(c_time, HKT).strftime('%Y-%m-%d %H:%M:%S') if c_time else ""
-                            results.append({
-                                "unique_id": f_id,
-                                "title": title,
-                                "content": body,
-                                "source": self.name,
-                                "link": f"{ZHITONG_FLASH_URL}#flash_{f_id}",
-                                "time": time_str
-                            })
-                            state_manager.add_scanned(f_id)
+                    if state_manager.is_news_scanned(raw_id):
+                        continue
 
-                    if stop_backward:
-                        break
-                    cursor = str(batch[-1].get("create_time"))
+                    time_nodes = el.css("div.allday-item-time")
+                    pub_time_str = ""
+                    if time_nodes:
+                        node_text = "".join(time_nodes[0].xpath(".//text()").getall()).strip()
+                        time_match = re.search(r'\d{2}:\d{2}:\d{2}', node_text)
+                        if time_match:
+                            pub_time_str = f"{today_str} {time_match.group(0)}"
+
+                    bold_nodes = content_nodes[0].css("b, strong")
+                    raw_text = "".join(content_nodes[0].xpath(".//text()").getall()).strip()
+                    
+                    if bold_nodes:
+                        bold_text = "".join(bold_nodes[0].xpath(".//text()").getall()).strip()
+                        body_text = raw_text.replace(bold_text, "").replace("编辑解读", "").replace("添加解读", "").strip()
+                        title = bold_text
+                        body = body_text
+                    else:
+                        title, body = self._split_title_and_content(raw_text)
+
+                    if len(title) >= 5 or len(body) > 15:
+                        results.append({
+                            "unique_id": raw_id,
+                            "title": title,
+                            "content": body,
+                            "source": self.name,
+                            "link": f"{ZHITONG_FLASH_URL}#flash_{raw_id}",
+                            "time": pub_time_str
+                        })
+                        state_manager.add_scanned(raw_id)
+        except Exception as e:
+            print(f"  ⚠️ [{self.name}] 執行異常: {e}")
 
         return results
