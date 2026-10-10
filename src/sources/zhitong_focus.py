@@ -1,6 +1,6 @@
 # src/sources/zhitong_focus.py
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urljoin
 from scrapling.fetchers import DynamicSession
 from src.config import HKT
@@ -69,7 +69,7 @@ class ZhitongFocusSource(BaseSource):
             year = now.year
             month = int(m_cn.group(1))
             day = int(m_cn.group(2))
-            # 💡 若僅有日期無時分，設為 22:00:00，確保當天晚間新聞能被收錄，翻到昨日新聞時才剎車
+            # 若無明確時分，設為 22:00:00，確保當天新聞被完整收錄，遇昨日新聞才剎車
             hour = int(m_cn.group(3)) if m_cn.group(3) else 22
             minute = int(m_cn.group(4)) if m_cn.group(4) else 0
             dt = datetime(year, month, day, hour, minute, 0, tzinfo=HKT)
@@ -86,22 +86,26 @@ class ZhitongFocusSource(BaseSource):
 
         def page_action_handler(page):
             nonlocal should_stop
+            # 阻斷非必要圖片、字體與第三方追蹤
             page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
 
             for p in range(1, max_pages + 1):
                 target_url = self.mobile_url_pattern.format(p)
-                try:
-                    page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
-                except Exception as e:
-                    print(f"  ⚠️ [{self.name}] 第 {p} 頁開啟超時: {e}")
-                    break
+                
+                # ⚡ 避免第 1 頁重複 goto: 第 1 頁已由 sess.fetch 載入，第 2 頁起才執行跳轉
+                if p > 1:
+                    try:
+                        page.goto(target_url, wait_until="domcontentloaded", timeout=18000)
+                    except Exception as e:
+                        print(f"  ⚠️ [{self.name}] 第 {p} 頁開啟超時: {e}")
+                        break
 
                 try:
-                    page.wait_for_selector('a[href*="detail"], a[href*="content_id"]', timeout=8000)
+                    page.wait_for_selector('a[href*="detail"], a[href*="content_id"]', timeout=6000)
                 except Exception:
                     pass
 
-                # 🚀 套用測試成功的 JS 向上錨定抽取邏輯
+                # 🚀 JS 向上錨定卡片抽取
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
@@ -195,10 +199,12 @@ class ZhitongFocusSource(BaseSource):
                     break
 
         try:
-            with DynamicSession(headless=True, stealth=True, timeout=30000) as sess:
+            with DynamicSession(headless=True, stealth=True, timeout=25000) as sess:
+                # ⚡ 顯式進入第 1 頁，只等待 DOM 骨架構建完成，防止連線掛起
                 sess.fetch(
-                    "https://m.zhitongcaijing.com/market.html",
+                    self.mobile_url_pattern.format(1),
                     wait_until="domcontentloaded",
+                    network_idle=False,
                     page_action=page_action_handler
                 )
         except Exception as e:
