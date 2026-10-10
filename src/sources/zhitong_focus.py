@@ -69,7 +69,6 @@ class ZhitongFocusSource(BaseSource):
             year = now.year 
             month = int(m_cn.group(1)) 
             day = int(m_cn.group(2)) 
-            # 若無明確時分，設為 22:00:00，確保當天新聞被完整收錄，遇昨日新聞才剎車 
             hour = int(m_cn.group(3)) if m_cn.group(3) else 22 
             minute = int(m_cn.group(4)) if m_cn.group(4) else 0 
             dt = datetime(year, month, day, hour, minute, 0, tzinfo=HKT) 
@@ -86,13 +85,11 @@ class ZhitongFocusSource(BaseSource):
 
         def page_action_handler(page): 
             nonlocal should_stop 
-            # 阻斷非必要圖片、字體與第三方追蹤 
             page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort()) 
 
             for p in range(1, max_pages + 1): 
                 target_url = self.mobile_url_pattern.format(p) 
                  
-                # ⚡ 避免第 1 頁重複 goto: 第 1 頁已由 sess.fetch 載入，第 2 頁起才執行跳轉 
                 if p > 1: 
                     try: 
                         page.goto(target_url, wait_until="domcontentloaded", timeout=18000) 
@@ -105,7 +102,7 @@ class ZhitongFocusSource(BaseSource):
                 except Exception: 
                     pass 
 
-                # 🚀 JS 向上錨定卡片抽取 
+                # 🛠️ 修正 JS 語法中的引號配對錯誤 (補齊 [class*="date"])
                 batch = page.evaluate("""() => { 
                     const results = []; 
                     const seenHrefs = new Set(); 
@@ -131,7 +128,7 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = ''; 
                         if (card) { 
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date'], span.time, .pubtime'); 
+                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime'); 
                             if (timeEl) { 
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim(); 
                             } 
@@ -166,7 +163,7 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "") 
                     full_link = urljoin(target_url, raw_href) 
 
-                    # 🛠️ 核心修復：碰到歷史記錄時改為 continue 跳過，絕不中斷整頁掃描，確保新發布消息不會被漏掉 
+                    # 碰頭歷史記錄時改為 continue 跳過，確保能抓取上方的最新更新新聞
                     if state_manager.is_news_scanned(full_link): 
                         continue 
 
@@ -198,7 +195,6 @@ class ZhitongFocusSource(BaseSource):
 
         try: 
             with DynamicSession(headless=True, stealth=True, timeout=25000) as sess: 
-                # ⚡ 顯式進入第 1 頁，只等待 DOM 骨架構建完成，防止連線掛起 
                 sess.fetch( 
                     self.mobile_url_pattern.format(1), 
                     wait_until="domcontentloaded", 
