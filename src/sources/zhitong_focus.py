@@ -102,6 +102,7 @@ class ZhitongFocusSource(BaseSource):
                 except Exception:
                     pass
 
+                # 🛠️ 修正 JS 語法中的引號不匹配 Bug
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
@@ -127,7 +128,7 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = '';
                         if (card) {
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date'], span.time, .pubtime');
+                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
                             if (timeEl) {
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
                             }
@@ -162,7 +163,7 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "")
                     full_link = urljoin(target_url, raw_href)
 
-                    # 🛠️ 修正點：碰到已掃描的歷史記錄時改為 continue 跳過，而不是 break 終止整個抓取流程
+                    # 已掃描的歷史記錄改為 continue 跳過，確保能抓取上方的最新更新新聞
                     if state_manager.is_news_scanned(full_link):
                         continue
 
