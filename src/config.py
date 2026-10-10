@@ -10,7 +10,7 @@ HISTORY_FILE = "data/history.json"
 
 # --- AI 設定 ---
 AI_MODEL = "gemini-3.5-flash-lite"
-MIN_SCORE = 80          
+MIN_SCORE = 88          
 MIN_CONFIDENCE = 70      
 
 # --- 港股關鍵字與基礎利好詞庫 ---
