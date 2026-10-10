@@ -102,7 +102,6 @@ class ZhitongFocusSource(BaseSource):
                 except Exception:
                     pass
 
-                # 🛠️ 修正 JS 語法中的引號不匹配 Bug
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
@@ -128,7 +127,7 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = '';
                         if (card) {
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
+                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date'], span.time, .pubtime');
                             if (timeEl) {
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
                             }
@@ -136,7 +135,7 @@ class ZhitongFocusSource(BaseSource):
 
                         const cardText = card ? (card.innerText || card.textContent || '') : title;
                         if (!rawTime) {
-                            const match = cardText.match(/(?:\\d{4}[-/])?\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\\s*\\d{1,2}:\\d{1,2}|\\b\\d{1,2}:\\d{1,2}(?::\\d{1,2})?\\b|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{1,2})?|\\d+\\s*(?:分鐘|分钟|小時|小时|分|h)\\s*前|剛剛|刚刚/);
+                            const match = cardText.match(/(?:\\d{4}[-/])?\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\\s*\\d{1,2}:\\d{1,2}|\\b\\d{1,2}:\\d{1,2}(?::\\d{1,2})?\\b|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{1,2})?|\\d+\\s*(?:分鐘|分钟|小時|小时|分|h)\\s*前|剛剛|kg/);
                             if (match) {
                                 rawTime = match[0];
                             }
@@ -163,7 +162,7 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "")
                     full_link = urljoin(target_url, raw_href)
 
-                    # 已掃描的歷史記錄改為 continue 跳過，確保能抓取上方的最新更新新聞
+                    # 🛠️ 核心修復：碰到歷史記錄時僅跳過（continue），絕不中斷整頁掃描，確保新發布的消息不會被漏掉
                     if state_manager.is_news_scanned(full_link):
                         continue
 
