@@ -48,15 +48,17 @@ class Orchestrator:
 
         # 1. 多源增量爬取
         raw_news = scraper.fetch_all(cutoff_ts, state_mgr)
+        
+        # 🚨 關鍵防護：若本次因網路逾時或異常導致抓取量為 0，絕對不更新 history.json 的 Cutoff 時間戳！
         if not raw_news:
-            print("📭 本次無新增或未掃描之新聞。")
-            state_mgr.save(int(now.timestamp()))
+            print("📭 本次採集為空（可能遇網路逾時或暫無更新），保留原 Cutoff 留待下輪重試，不更新狀態。")
+            state_mgr.save()  # 不傳入新時間戳，保持原有水位線
             return
 
         # 2. 關鍵字初篩與同事件去重
         filtered_news = news_filter.apply(raw_news)
         if not filtered_news:
-            print("⚡ 新聞皆未命中港股或利好關鍵字，結束分析。")
+            print("⚡ 新聞皆未命中港股或利好關鍵字。")
             state_mgr.save(int(now.timestamp()))
             return
 
@@ -85,7 +87,7 @@ class Orchestrator:
         else:
             print(f"📉 經 AI 研判，本次無符合 >= {MIN_SCORE} 分之高確定性利好事件。")
 
-        # 5. 持久化最新狀態
+        # 5. 確保順利完成後，才安全推進時間水位線
         state_mgr.save(int(now.timestamp()))
         print("🏁 當輪採集完畢，狀態已寫入 data/history.json。")
 
