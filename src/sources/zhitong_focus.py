@@ -1,11 +1,11 @@
 # src/sources/zhitong_focus.py
-# src/sources/zhitong_focus.py
 import re
 from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse, parse_qs
 from scrapling.fetchers import DynamicSession
 from src.config import HKT
 from src.sources.base import BaseSource
+
 
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
@@ -15,8 +15,7 @@ class ZhitongFocusSource(BaseSource):
     def _normalize_url(self, url: str) -> str:
         """
         ✅ 核心修復：URL 標準化
-        強制將不同格式的文章連結統一轉換為 share.html?content_id=XXX 格式，
-        確保與 history.json 中的記錄能精準比對，防止重複抓取。
+        強制將不同格式的文章連結統一轉換為 share.html?content_id=XXX 格式
         """
         if not url:
             return ""
@@ -183,6 +182,21 @@ class ZhitongFocusSource(BaseSource):
                     print(f"  💤 [{self.name}] 第 {p} 頁無任何數據，當前沒有最新消息更新。")
                     break
 
+                # ============================================================
+                # ✅ 診斷日誌：印出網頁上實際抓到的前 10 條 (含原始連結與標準化連結)
+                # ============================================================
+                print(f"\n  📋 [{self.name}] 第 {p} 頁抓取結果 (前10條):")
+                for idx, item in enumerate(batch[:10], 1):
+                    raw_href = item.get("href", "")
+                    full_link_raw = urljoin(target_url, raw_href)
+                    normalized = self._normalize_url(full_link_raw)
+                    is_scanned = state_manager.is_news_scanned(normalized)
+                    status_icon = "🔴已讀" if is_scanned else "🟢新訊"
+                    print(f"     {idx:2d}. [{status_icon}] {item.get('raw_time', 'N/A'):>16s} | {item.get('title', '')[:35]}...")
+                    print(f"         原始: {full_link_raw}")
+                    print(f"         標準: {normalized}")
+                print()
+
                 page_added = 0
                 for item in batch:
                     title = item.get("title", "")
@@ -191,11 +205,9 @@ class ZhitongFocusSource(BaseSource):
 
                     raw_href = item.get("href", "")
                     full_link_raw = urljoin(target_url, raw_href)
-                    
-                    # ✅ 核心修復：強制標準化 URL，確保能與 history.json 中的 ID 精準比對
                     full_link = self._normalize_url(full_link_raw)
 
-                    # 1. 碰頭已掃描歷史記錄 -> 立即終止 (因為列表是由新到舊)
+                    # 1. 碰頭已掃描歷史記錄 -> 立即終止
                     if state_manager.is_news_scanned(full_link):
                         print(f"  🛑 [{self.name}] 碰頭歷史記錄，當前沒有最新消息更新。")
                         print(f"     └─ 標題: {title[:40]}...")
@@ -225,11 +237,22 @@ class ZhitongFocusSource(BaseSource):
                     state_manager.add_scanned(full_link)
                     page_added += 1
 
-                # ✅ 整頁皆為歷史記錄或無新增時，輸出明確提示
                 if should_stop or page_added == 0:
                     if page_added == 0 and not should_stop:
                         print(f"  💤 [{self.name}] 第 {p} 頁全為歷史記錄，當前沒有最新消息更新。")
                     break
+
+        # ============================================================
+        # ✅ 診斷日誌：在開始抓取前，先印出 history.json 中已記錄的前 10 條
+        # ============================================================
+        existing_links = state_manager.get_all_scanned_news_links() if hasattr(state_manager, 'get_all_scanned_news_links') else []
+        print(f"\n  📚 [{self.name}] history.json 已記錄新聞 (前10條):")
+        if existing_links:
+            for idx, link in enumerate(existing_links[:10], 1):
+                print(f"     {idx:2d}. {link}")
+        else:
+            print(f"     (無歷史記錄)")
+        print()
 
         try:
             with DynamicSession(headless=True, stealth=True, timeout=25000) as sess:
