@@ -103,15 +103,15 @@ class ZhitongFocusSource(BaseSource):
                         break
 
                 try:
-                    page.wait_for_selector('a[href*="detail"], a[href*="content_id"]', timeout=6000)
+                    page.wait_for_selector('a[href*="/content/detail/"], a[href*="content_id"]', timeout=6000)
                 except Exception:
                     pass
 
-                # 🚀 JS 向上錨定卡片抽取
+                # 🚀 JS 向上錨定卡片抽取 (✅ 適配新版 div.info-list-item 結構)
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
-                    const aTags = Array.from(document.querySelectorAll('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]'));
+                    const aTags = Array.from(document.querySelectorAll('a[href*="/content/detail/"], a[href*="content_id"]'));
                     
                     for (const a of aTags) {
                         const title = (a.innerText || a.textContent || '').trim();
@@ -119,7 +119,8 @@ class ZhitongFocusSource(BaseSource):
                         if (title.length < 8 || !href || seenHrefs.has(href)) continue;
                         seenHrefs.add(href);
 
-                        let card = a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section');
+                        // ✅ 優先精確匹配新版卡片容器
+                        let card = a.closest('div.info-list-item') || a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section');
                         if (!card) {
                             let p = a.parentElement;
                             while (p && p !== document.body) {
@@ -133,7 +134,8 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = '';
                         if (card) {
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
+                            // ✅ 優先精確匹配新版時間位置：operat區第一個span
+                            const timeEl = card.querySelector('.info-item-content-operat > span:first-child, .time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
                             if (timeEl) {
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
                             }
