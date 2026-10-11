@@ -88,7 +88,6 @@ class ZhitongFocusSource(BaseSource):
             nonlocal should_stop
             page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
 
-            # ✅ Session 級別去重
             scanned_in_session = set()
 
             for p in range(1, max_pages + 1):
@@ -158,7 +157,8 @@ class ZhitongFocusSource(BaseSource):
                     break
 
                 page_added = 0
-                consecutive_seen = 0  # ✅ 新增：連續碰頭計數器
+                consecutive_seen = 0
+                seen_details = []  # ✅ 新增：緩衝區，用於記錄碰頭新聞詳情
 
                 for item in batch:
                     title = item.get("title", "")
@@ -168,29 +168,38 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "")
                     full_link = urljoin(target_url, raw_href)
 
-                    # ✅ Session 內去重
                     if full_link in scanned_in_session:
                         continue
                     scanned_in_session.add(full_link)
 
-                    # ✅ 核心改動：碰頭歷史記錄 → 跳過而非終止
+                    # ✅ 碰頭歷史記錄處理（含詳情日誌）
                     if state_manager.is_news_scanned(full_link):
                         consecutive_seen += 1
-                        # 只有連續 5 條都是舊聞，才認為確實翻到了舊區，安全終止
+
+                        # 解析該條碰頭新聞的時間（僅供日誌展示，不影響主流程）
+                        raw_time = item.get("raw_time", "")
+                        _, parsed_time_str = self._parse_time_str(raw_time)
+                        display_time = parsed_time_str if parsed_time_str else "(無法解析)"
+
+                        # 只緩存前 5 條的詳情
+                        if len(seen_details) < 5:
+                            seen_details.append((title[:40], display_time))
+
                         if consecutive_seen >= 5:
                             print(f"  🛑 [{self.name}] 連續 {consecutive_seen} 條碰頭歷史記錄，確認進入舊聞區，結束翻頁。")
+                            for idx, (t, tm) in enumerate(seen_details, 1):
+                                print(f"      ↳ [{idx}] {tm} | {t}")
                             should_stop = True
                             break
-                        # 否則僅跳過本條，繼續檢查後續新聞
                         continue
 
-                    # ✅ 遇到新消息，重置連續碰頭計數
+                    # ✅ 遇到新消息，重置計數器與緩衝區
                     consecutive_seen = 0
+                    seen_details.clear()
 
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
-                    # 時間下限仍然是硬性終止條件（這個不變）
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                         print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
                         should_stop = True
