@@ -70,7 +70,6 @@ class ZhitongFocusSource(BaseSource):
             year = now.year
             month = int(m_cn.group(1))
             day = int(m_cn.group(2))
-            # 若無明確時分，設為 22:00:00，確保當天新聞被完整收錄，遇昨日新聞才剎車
             hour = int(m_cn.group(3)) if m_cn.group(3) else 22
             minute = int(m_cn.group(4)) if m_cn.group(4) else 0
             dt = datetime(year, month, day, hour, minute, 0, tzinfo=HKT)
@@ -87,17 +86,14 @@ class ZhitongFocusSource(BaseSource):
 
         def page_action_handler(page):
             nonlocal should_stop
-            # 阻斷非必要圖片、字體與第三方追蹤
             page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
 
-            # ✅ 新增：Session 級別去重（從 zhitong_flash.py 移植）
-            # 防止同頁/相鄰頁重複 DOM 節點導致重複查詢 state_manager 或誤觸剎車
+            # ✅ Session 級別去重
             scanned_in_session = set()
 
             for p in range(1, max_pages + 1):
                 target_url = self.mobile_url_pattern.format(p)
 
-                # ⚡ 避免第 1 頁重複 goto: 第 1 頁已由 sess.fetch 載入，第 2 頁起才執行跳轉
                 if p > 1:
                     try:
                         page.goto(target_url, wait_until="domcontentloaded", timeout=18000)
@@ -110,7 +106,6 @@ class ZhitongFocusSource(BaseSource):
                 except Exception:
                     pass
 
-                # 🚀 JS 向上錨定卡片抽取（原版邏輯，未修改）
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
@@ -163,6 +158,8 @@ class ZhitongFocusSource(BaseSource):
                     break
 
                 page_added = 0
+                consecutive_seen = 0  # ✅ 新增：連續碰頭計數器
+
                 for item in batch:
                     title = item.get("title", "")
                     if any(w in title for w in ["登入", "登錄", "下載", "首頁", "版權所有"]):
@@ -171,22 +168,29 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "")
                     full_link = urljoin(target_url, raw_href)
 
-                    # ✅ 新增：Session 內去重，避免重複查詢 state_manager
+                    # ✅ Session 內去重
                     if full_link in scanned_in_session:
                         continue
                     scanned_in_session.add(full_link)
 
-                    # 1. 碰頭已掃描歷史記錄 -> 立即終止（原版邏輯）
+                    # ✅ 核心改動：碰頭歷史記錄 → 跳過而非終止
                     if state_manager.is_news_scanned(full_link):
-                        print(f"  🛑 [{self.name}] 碰頭歷史記錄 [{title[:25]}...]，結束翻頁。")
-                        should_stop = True
-                        break
+                        consecutive_seen += 1
+                        # 只有連續 5 條都是舊聞，才認為確實翻到了舊區，安全終止
+                        if consecutive_seen >= 5:
+                            print(f"  🛑 [{self.name}] 連續 {consecutive_seen} 條碰頭歷史記錄，確認進入舊聞區，結束翻頁。")
+                            should_stop = True
+                            break
+                        # 否則僅跳過本條，繼續檢查後續新聞
+                        continue
 
-                    # 2. 解析時間（原版邏輯）
+                    # ✅ 遇到新消息，重置連續碰頭計數
+                    consecutive_seen = 0
+
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
-                    # 3. 觸達 16:00 水位線 (翻到昨日新聞) -> 立即終止（原版邏輯）
+                    # 時間下限仍然是硬性終止條件（這個不變）
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                         print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
                         should_stop = True
@@ -210,7 +214,6 @@ class ZhitongFocusSource(BaseSource):
 
         try:
             with DynamicSession(headless=True, stealth=True, timeout=25000) as sess:
-                # ⚡ 顯式進入第 1 頁，只等待 DOM 骨架構建完成，防止連線掛起
                 sess.fetch(
                     self.mobile_url_pattern.format(1),
                     wait_until="domcontentloaded",
