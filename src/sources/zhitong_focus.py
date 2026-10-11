@@ -81,7 +81,7 @@ class ZhitongFocusSource(BaseSource):
     def fetch(self, cutoff_ts, existing_links):
         results = []
         should_stop = False
-        
+
         # 🔧 修復：新增連續空頁計數器，防止因單頁無新消息而過早終止翻頁
         consecutive_empty_pages = 0
         MAX_CONSECUTIVE_EMPTY_PAGES = 2
@@ -92,7 +92,7 @@ class ZhitongFocusSource(BaseSource):
 
             try:
                 response = self.fetcher.get(url, timeout=30)
-                
+
                 # 透過 JS 提取新聞卡片數據
                 js_script = """
                 return Array.from(document.querySelectorAll('.news-list li, .news_item, .list_item')).map(item => {
@@ -134,7 +134,6 @@ class ZhitongFocusSource(BaseSource):
                         pub_ts = time.time()
 
                     # 觸達時間下限 -> 終止
-                    if
                     if pub_ts <= cutoff_ts:
                         print(f"  ⏱️ [{self.name}] 觸達時間下限 [{title[:25]}...]，結束翻頁。")
                         should_stop = True
@@ -153,7 +152,7 @@ class ZhitongFocusSource(BaseSource):
                 # 🔧 修復：翻頁終止條件邏輯重構
                 if should_stop:
                     break
-                
+
                 if page_added == 0:
                     consecutive_empty_pages += 1
                     if consecutive_empty_pages >= MAX_CONSECUTIVE_EMPTY_PAGES:
