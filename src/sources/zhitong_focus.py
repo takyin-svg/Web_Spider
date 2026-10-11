@@ -18,12 +18,15 @@ class ZhitongFocusSource(BaseSource):
         if not text:
             return 0, ""
 
+        # 清洗尾部作者/來源標記
+        text = re.split(r'\s*[|｜]\s*', text)[0].strip()
+
         # 1. 剛剛 / 刚刚
         if any(k in text for k in ["剛", "刚"]):
             ts = int(now.timestamp())
             return ts, now.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 2. 相對時間：分鐘前 / 小時前
+        # 2. 相對時間
         m_min = re.search(r'(\d+)\s*(?:分鐘|分钟|分)\s*前', text)
         if m_min:
             ts = int(now.timestamp()) - int(m_min.group(1)) * 60
@@ -47,15 +50,13 @@ class ZhitongFocusSource(BaseSource):
         m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
             year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
-            month = int(m_date_time.group(2))
-            day = int(m_date_time.group(3))
-            hour = int(m_date_time.group(4))
-            minute = int(m_date_time.group(5))
+            month, day = int(m_date_time.group(2)), int(m_date_time.group(3))
+            hour, minute = int(m_date_time.group(4)), int(m_date_time.group(5))
             second = int(m_date_time.group(6)) if m_date_time.group(6) else 0
             dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 5. 純當日時間 18:30 或 今天 18:30
+        # 5. 純當日時間
         m_today = re.search(r'(?:(?:今[天日])\s*)?(\b\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\b', text)
         if m_today and not re.search(r'\d{1,2}[-/月]\d{1,2}', text):
             h, m = int(m_today.group(1)), int(m_today.group(2))
@@ -64,12 +65,11 @@ class ZhitongFocusSource(BaseSource):
                 dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
                 return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 6. 中文日期 10月9日 18:30 或 10月9日
+        # 6. 中文日期 (含純日期兜底)
         m_cn = re.search(r'(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', text)
         if m_cn:
             year = now.year
-            month = int(m_cn.group(1))
-            day = int(m_cn.group(2))
+            month, day = int(m_cn.group(1)), int(m_cn.group(2))
             hour = int(m_cn.group(3)) if m_cn.group(3) else 22
             minute = int(m_cn.group(4)) if m_cn.group(4) else 0
             dt = datetime(year, month, day, hour, minute, 0, tzinfo=HKT)
@@ -77,15 +77,28 @@ class ZhitongFocusSource(BaseSource):
 
         return 0, ""
 
-    def fetch(self, cutoff_timestamp: int, state_manager, max_pages: int = 8) -> list[dict]:
+    def fetch(self, state_manager, max_pages: int = 12) -> list[dict]:
+        """
+        抓取智通焦點新聞。
+        固定回溯 72 小時作為安全閥，實際邊界由「首次碰頭即停」精確控制。
+        """
         results = []
-        cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S')
-        print(f"  🔍 [{self.name}] 啟動手機版深度識別，目標時間下限: {cutoff_dt_str}")
+        
+        # ✅ 1. 固定計算 72 小時 Cutoff (無視星期幾，簡單粗暴且安全)
+        now = datetime.now(HKT)
+        cutoff_dt = now - timedelta(hours=72)
+        cutoff_timestamp = int(cutoff_dt.timestamp())
+        cutoff_dt_str = cutoff_dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # ✅ 2. 日誌明確顯示 max_pages 和 回溯上限
+        print(f"  🔍 [{self.name}] 啟動手機版深度識別 (max_pages={max_pages}, 回溯上限: 72小時)")
+        print(f"     └─ 目標時間下限: {cutoff_dt_str}")
 
         should_stop = False
 
         def page_action_handler(page):
             nonlocal should_stop
+            # 攔截圖片/字體等靜態資源，加速載入
             page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
 
             scanned_in_session = set()
@@ -105,26 +118,29 @@ class ZhitongFocusSource(BaseSource):
                 except Exception:
                     pass
 
+                # JS 提取邏輯
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
                     const aTags = Array.from(document.querySelectorAll('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]'));
                     
                     for (const a of aTags) {
-                        const title = (a.innerText || a.textContent || '').trim();
+                        let title = (a.innerText || a.textContent || '').trim();
+                        title = title.split(/[|｜]/)[0].trim().replace(/\\s+/g, ' ');
+                        
                         const href = a.getAttribute('href') || '';
                         if (title.length < 8 || !href || seenHrefs.has(href)) continue;
                         seenHrefs.add(href);
 
                         let card = a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section');
                         if (!card) {
-                            let p = a.parentElement;
-                            while (p && p !== document.body) {
-                                if (p.innerText && p.innerText.length > title.length + 3) {
-                                    card = p;
+                            let el = a.parentElement;
+                            while (el && el !== document.body) {
+                                if (el.innerText && el.innerText.length > title.length + 3) {
+                                    card = el;
                                     break;
                                 }
-                                p = p.parentElement;
+                                el = el.parentElement;
                             }
                         }
 
@@ -139,26 +155,19 @@ class ZhitongFocusSource(BaseSource):
                         const cardText = card ? (card.innerText || card.textContent || '') : title;
                         if (!rawTime) {
                             const match = cardText.match(/(?:\\d{4}[-/])?\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\\s*\\d{1,2}:\\d{1,2}|\\b\\d{1,2}:\\d{1,2}(?::\\d{1,2})?\\b|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{1,2})?|\\d+\\s*(?:分鐘|分钟|小時|小时|分|h)\\s*前|剛剛|刚刚/);
-                            if (match) {
-                                rawTime = match[0];
-                            }
+                            if (match) rawTime = match[0];
                         }
 
-                        results.push({
-                            title: title.replace(/\\s+/g, ' '),
-                            href: href,
-                            raw_time: rawTime
-                        });
+                        results.push({ title, href, raw_time: rawTime });
                     }
                     return results;
                 }""")
 
                 if not batch:
+                    print(f"  ℹ️ [{self.name}] 第 {p} 頁無內容，停止翻頁。")
                     break
 
                 page_added = 0
-                consecutive_seen = 0
-                seen_details = []  # ✅ 新增：緩衝區，用於記錄碰頭新聞詳情
 
                 for item in batch:
                     title = item.get("title", "")
@@ -168,43 +177,27 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "")
                     full_link = urljoin(target_url, raw_href)
 
+                    # Session 內去重
                     if full_link in scanned_in_session:
                         continue
                     scanned_in_session.add(full_link)
 
-                    # ✅ 碰頭歷史記錄處理（含詳情日誌）
+                    # ✅ 核心策略 1：首次碰頭即停（遇到已處理新聞立即終止，這才是真正的精確邊界）
                     if state_manager.is_news_scanned(full_link):
-                        consecutive_seen += 1
-
-                        # 解析該條碰頭新聞的時間（僅供日誌展示，不影響主流程）
-                        raw_time = item.get("raw_time", "")
-                        _, parsed_time_str = self._parse_time_str(raw_time)
-                        display_time = parsed_time_str if parsed_time_str else "(無法解析)"
-
-                        # 只緩存前 5 條的詳情
-                        if len(seen_details) < 5:
-                            seen_details.append((title[:40], display_time))
-
-                        if consecutive_seen >= 5:
-                            print(f"  🛑 [{self.name}] 連續 {consecutive_seen} 條碰頭歷史記錄，確認進入舊聞區，結束翻頁。")
-                            for idx, (t, tm) in enumerate(seen_details, 1):
-                                print(f"      ↳ [{idx}] {tm} | {t}")
-                            should_stop = True
-                            break
-                        continue
-
-                    # ✅ 遇到新消息，重置計數器與緩衝區
-                    consecutive_seen = 0
-                    seen_details.clear()
+                        print(f"  🛑 [{self.name}] 第 {p} 頁遇到已處理新聞 [{title[:30]}...]，確認進入舊聞區，結束翻頁。")
+                        should_stop = True
+                        break
 
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
+                    # ✅ 核心策略 2：Cutoff 時間下限（72小時安全閥，防止 state_manager 清空時無限抓取）
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
-                        print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
+                        print(f"  🛑 [{self.name}] 第 {p} 頁觸達時間下限 [{pub_time_str}]: [{title[:30]}...]，結束翻頁。")
                         should_stop = True
                         break
 
+                    # 時間解析失敗兜底
                     if not pub_time_str:
                         pub_time_str = datetime.now(HKT).strftime('%Y-%m-%d %H:%M:%S')
 
