@@ -1,5 +1,5 @@
 {
-  "last_run_timestamp": 1791687128,
+  "last_run_timestamp": 1791717405,
   "flash_seen_ids": [
     "7976138",
     "7974020",
@@ -100,7 +100,10 @@
     "7972890",
     "7972892",
     "7972870",
-    "7972864"
+    "7972864",
+    "7976664",
+    "7976659",
+    "7976605"
   ],
   "news_seen_links": [
     "https://m.zhitongcaijing.com/article/share.html?content_id=1505517",
@@ -174,6 +177,24 @@
       "stock": "",
       "event": "AI_PROCESSED",
       "timestamp": "2026-10-11 10:52"
+    },
+    {
+      "key": "7976664",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-11 19:17"
+    },
+    {
+      "key": "7976659",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-11 19:17"
+    },
+    {
+      "key": "7976605",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-11 19:17"
     }
   ]
 }
