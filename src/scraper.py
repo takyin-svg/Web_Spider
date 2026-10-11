@@ -11,11 +11,7 @@ class HKStockScraper:
             ZhitongFlashSource(),
         ]
 
-    def fetch_all(self, state_manager) -> list[dict]:
-        """
-        依序執行所有來源的增量採集。
-        ✅ 已移除 cutoff_timestamp 參數，各來源內部自行管理 72h 安全閥與碰頭即停邏輯。
-        """
+    def fetch_all(self, cutoff_timestamp: int, state_manager) -> list[dict]:
         all_news = []
         source_summary = {}
 
@@ -28,9 +24,7 @@ class HKStockScraper:
             print(f"\n▶ 正在執行來源: [{source_name}]")
             
             try:
-                # ✅ 核心修正：強制使用關鍵字參數傳遞 state_manager
-                # 避免任何因位置參數順序不一致導致的 TypeError
-                items = source.fetch(state_manager=state_manager)
+                items = source.fetch(cutoff_timestamp, state_manager)
                 count = len(items) if items else 0
                 source_summary[source_name] = count
                 
