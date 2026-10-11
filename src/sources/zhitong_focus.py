@@ -6,6 +6,7 @@ from scrapling.fetchers import DynamicSession
 from src.config import HKT
 from src.sources.base import BaseSource
 
+
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
@@ -89,9 +90,13 @@ class ZhitongFocusSource(BaseSource):
             # 阻斷非必要圖片、字體與第三方追蹤
             page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
 
+            # ✅ 新增：Session 級別去重（從 zhitong_flash.py 移植）
+            # 防止同頁/相鄰頁重複 DOM 節點導致重複查詢 state_manager 或誤觸剎車
+            scanned_in_session = set()
+
             for p in range(1, max_pages + 1):
                 target_url = self.mobile_url_pattern.format(p)
-                
+
                 # ⚡ 避免第 1 頁重複 goto: 第 1 頁已由 sess.fetch 載入，第 2 頁起才執行跳轉
                 if p > 1:
                     try:
@@ -105,7 +110,7 @@ class ZhitongFocusSource(BaseSource):
                 except Exception:
                     pass
 
-                # 🚀 JS 向上錨定卡片抽取
+                # 🚀 JS 向上錨定卡片抽取（原版邏輯，未修改）
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
@@ -166,17 +171,22 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "")
                     full_link = urljoin(target_url, raw_href)
 
-                    # 1. 碰頭已掃描歷史記錄 -> 立即終止
+                    # ✅ 新增：Session 內去重，避免重複查詢 state_manager
+                    if full_link in scanned_in_session:
+                        continue
+                    scanned_in_session.add(full_link)
+
+                    # 1. 碰頭已掃描歷史記錄 -> 立即終止（原版邏輯）
                     if state_manager.is_news_scanned(full_link):
                         print(f"  🛑 [{self.name}] 碰頭歷史記錄 [{title[:25]}...]，結束翻頁。")
                         should_stop = True
                         break
 
-                    # 2. 解析時間
+                    # 2. 解析時間（原版邏輯）
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
-                    # 3. 觸達 16:00 水位線 (翻到昨日新聞) -> 立即終止
+                    # 3. 觸達 16:00 水位線 (翻到昨日新聞) -> 立即終止（原版邏輯）
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                         print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
                         should_stop = True
