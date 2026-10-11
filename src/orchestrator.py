@@ -38,20 +38,21 @@ class Orchestrator:
 
     def _execute_pipeline(self, state_mgr, scraper, news_filter, analyzer, notifier):
         """執行單次完整的增量採集、初篩、Gemini 分析與飛書推送流程"""
-        cutoff_ts = state_mgr.get_cutoff_timestamp()
         now = datetime.now(HKT)
 
         print("\n==================================================")
         print(f"⏰ [{now.strftime('%H:%M:%S')} HKT] 開始執行增量資訊採集流程！")
-        print(f"⏱️ 本次採集時間下限 (Cutoff): {datetime.fromtimestamp(cutoff_ts, HKT).strftime('%Y-%m-%d %H:%M:%S')}")
+        # ✅ 更新日誌：不再顯示上層計算的 cutoff_ts，因為各來源已內建 72h 安全閥 + 碰頭即停
+        print("⚙️ 採集策略: 各來源獨立執行 [72小時安全閥 + 首次碰頭即停]")
         print("==================================================")
 
-        # 1. 多源增量爬取
-        raw_news = scraper.fetch_all(cutoff_ts, state_mgr)
+        # ✅ 核心修正：不再傳遞 cutoff_ts，僅傳遞 state_mgr
+        # 讓底層 source 自行決定邊界，徹底解耦上層調度
+        raw_news = scraper.fetch_all(state_mgr)
         
         # 🚨 關鍵防護：若本次因網路逾時或異常導致抓取量為 0，絕對不更新 history.json 的 Cutoff 時間戳！
         if not raw_news:
-            print("📭 本次採集為空（可能遇網路逾時或暫無更新），保留原 Cutoff 留待下輪重試，不更新狀態。")
+            print("📭 本次採集為空（可能遇網路逾時或暫無更新），保留原狀態留待下輪重試。")
             state_mgr.save()  # 不傳入新時間戳，保持原有水位線
             return
 
