@@ -13,29 +13,19 @@ class ZhitongFocusSource(BaseSource):
         self.mobile_url_pattern = "https://m.zhitongcaijing.com/market.html?page={}"
 
     def _normalize_url(self, url: str) -> str:
-        """
-        ✅ 核心修復：URL 標準化
-        強制將不同格式的文章連結統一轉換為 share.html?content_id=XXX 格式
-        """
+        """強制將不同格式的文章連結統一轉換為 share.html?content_id=XXX 格式"""
         if not url:
             return ""
-        
-        # 1. 嘗試從 Query String 提取 (例如: share.html?content_id=123)
         parsed = urlparse(url)
         qs = parse_qs(parsed.query)
         if 'content_id' in qs:
             return f"https://m.zhitongcaijing.com/article/share.html?content_id={qs['content_id'][0]}"
-            
-        # 2. 嘗試從 Path 路徑提取 (例如: /content/detail/1505550.html)
         match = re.search(r'/content/detail/(\d+)', url)
         if match:
             return f"https://m.zhitongcaijing.com/article/share.html?content_id={match.group(1)}"
-            
-        # 3. 最後防線：直接用正則提取 URL 中的連續數字 ID
         match = re.search(r'content_id=(\d+)', url) or re.search(r'/(\d{6,})(?:\.html)?$', url)
         if match:
             return f"https://m.zhitongcaijing.com/article/share.html?content_id={match.group(1)}"
-            
         return url
 
     def _parse_time_str(self, text: str) -> tuple[int, str]:
@@ -44,12 +34,10 @@ class ZhitongFocusSource(BaseSource):
         if not text:
             return 0, ""
 
-        # 1. 剛剛 / 刚刚
         if any(k in text for k in ["剛", "刚"]):
             ts = int(now.timestamp())
             return ts, now.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 2. 相對時間：分鐘前 / 小時前
         m_min = re.search(r'(\d+)\s*(?:分鐘|分钟|分)\s*前', text)
         if m_min:
             ts = int(now.timestamp()) - int(m_min.group(1)) * 60
@@ -60,7 +48,6 @@ class ZhitongFocusSource(BaseSource):
             ts = int(now.timestamp()) - int(m_hr.group(1)) * 3600
             return ts, datetime.fromtimestamp(ts, HKT).strftime('%Y-%m-%d %H:%M:%S')
 
-        # 3. 昨天 / 前天
         m_yest = re.search(r'(?:昨[天日]|前[天日])\s*(\d{1,2}):(\d{1,2})', text)
         if m_yest:
             days_ago = 2 if "前" in m_yest.group(0) else 1
@@ -69,7 +56,6 @@ class ZhitongFocusSource(BaseSource):
             dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 4. YYYY-MM-DD HH:MM 或 MM-DD HH:MM
         m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
             year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
@@ -81,7 +67,6 @@ class ZhitongFocusSource(BaseSource):
             dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 5. 純當日時間 18:30 或 今天 18:30
         m_today = re.search(r'(?:(?:今[天日])\s*)?(\b\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\b', text)
         if m_today and not re.search(r'\d{1,2}[-/月]\d{1,2}', text):
             h, m = int(m_today.group(1)), int(m_today.group(2))
@@ -90,7 +75,6 @@ class ZhitongFocusSource(BaseSource):
                 dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
                 return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 6. 中文日期 10月9日 18:30 或 10月9日
         m_cn = re.search(r'(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', text)
         if m_cn:
             year = now.year
@@ -108,6 +92,15 @@ class ZhitongFocusSource(BaseSource):
         cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S')
         print(f"  🔍 [{self.name}] 啟動手機版深度識別，目標時間下限: {cutoff_dt_str}")
 
+        # ✅ 修復1: 建立本地 seen set，繞過可能有問題的 state_manager.is_news_scanned()
+        local_seen_links: set[str] = set()
+        try:
+            existing = state_manager.get_all_scanned_news_links() if hasattr(state_manager, 'get_all_scanned_news_links') else []
+            local_seen_links.update(existing)
+            print(f"  📚 [{self.name}] 已載入 {len(local_seen_links)} 條歷史記錄至本地快取")
+        except Exception as e:
+            print(f"  ⚠️ [{self.name}] 載入歷史記錄失敗: {e}")
+
         should_stop = False
 
         def page_action_handler(page):
@@ -116,7 +109,7 @@ class ZhitongFocusSource(BaseSource):
 
             for p in range(1, max_pages + 1):
                 target_url = self.mobile_url_pattern.format(p)
-                
+
                 if p > 1:
                     try:
                         page.goto(target_url, wait_until="domcontentloaded", timeout=18000)
@@ -125,48 +118,42 @@ class ZhitongFocusSource(BaseSource):
                         break
 
                 try:
-                    page.wait_for_selector('a[href*="detail"], a[href*="content_id"]', timeout=6000)
+                    page.wait_for_selector('.home-list-scroll .info-list-item a[href*="detail"]', timeout=6000)
                 except Exception:
                     pass
 
-                # 🚀 JS 向上錨定卡片抽取
+                # ✅ 修復2: JS 選擇器強制限定在 .home-list-scroll .info-list-item 內
+                # 避免抓到側邊欄、推薦區或隱藏區塊的舊連結
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
-                    const aTags = Array.from(document.querySelectorAll('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]'));
-                    
-                    for (const a of aTags) {
+                    // 強制限定在首頁新聞列表容器內
+                    const items = Array.from(document.querySelectorAll('.home-list-scroll .info-list-item'));
+
+                    for (const item of items) {
+                        const a = item.querySelector('a[href*="/content/detail/"]');
+                        if (!a) continue;
+
                         const title = (a.innerText || a.textContent || '').trim();
                         const href = a.getAttribute('href') || '';
                         if (title.length < 8 || !href || seenHrefs.has(href)) continue;
                         seenHrefs.add(href);
 
-                        let card = a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section') || a.closest('div.info-list-item');
-                        if (!card) {
-                            let p = a.parentElement;
-                            while (p && p !== document.body) {
-                                if (p.innerText && p.innerText.length > title.length + 3) {
-                                    card = p;
-                                    break;
-                                }
-                                p = p.parentElement;
-                            }
-                        }
-
+                        // 時間提取：優先從 .info-item-content-operat 第一個 span
                         let rawTime = '';
-                        if (card) {
-                            const timeEl = card.querySelector('.info-item-content-operat > span:first-child, .time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
-                            if (timeEl) {
-                                rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
+                        const operatDiv = item.querySelector('.info-item-content-operat');
+                        if (operatDiv) {
+                            const timeSpan = operatDiv.querySelector('span:first-child');
+                            if (timeSpan) {
+                                rawTime = (timeSpan.innerText || timeSpan.textContent || '').trim();
                             }
                         }
 
-                        const cardText = card ? (card.innerText || card.textContent || '') : title;
+                        // 備用：正則從卡片文字中提取
                         if (!rawTime) {
+                            const cardText = item.innerText || '';
                             const match = cardText.match(/(?:\\d{4}[-/])?\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\\s*\\d{1,2}:\\d{1,2}|\\b\\d{1,2}:\\d{1,2}(?::\\d{1,2})?\\b|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{1,2})?|\\d+\\s*(?:分鐘|分钟|小時|小时|分|h)\\s*前|剛剛|刚刚/);
-                            if (match) {
-                                rawTime = match[0];
-                            }
+                            if (match) rawTime = match[0];
                         }
 
                         results.push({
@@ -182,18 +169,15 @@ class ZhitongFocusSource(BaseSource):
                     print(f"  💤 [{self.name}] 第 {p} 頁無任何數據，當前沒有最新消息更新。")
                     break
 
-                # ============================================================
-                # ✅ 診斷日誌：印出網頁上實際抓到的前 10 條 (含原始連結與標準化連結)
-                # ============================================================
+                # === 診斷日誌：印出網頁上實際抓到的前 10 條 ===
                 print(f"\n  📋 [{self.name}] 第 {p} 頁抓取結果 (前10條):")
                 for idx, item in enumerate(batch[:10], 1):
                     raw_href = item.get("href", "")
                     full_link_raw = urljoin(target_url, raw_href)
                     normalized = self._normalize_url(full_link_raw)
-                    is_scanned = state_manager.is_news_scanned(normalized)
+                    is_scanned = normalized in local_seen_links
                     status_icon = "🔴已讀" if is_scanned else "🟢新訊"
                     print(f"     {idx:2d}. [{status_icon}] {item.get('raw_time', 'N/A'):>16s} | {item.get('title', '')[:35]}...")
-                    print(f"         原始: {full_link_raw}")
                     print(f"         標準: {normalized}")
                 print()
 
@@ -204,21 +188,18 @@ class ZhitongFocusSource(BaseSource):
                         continue
 
                     raw_href = item.get("href", "")
-                    full_link_raw = urljoin(target_url, raw_href)
-                    full_link = self._normalize_url(full_link_raw)
+                    full_link = self._normalize_url(urljoin(target_url, raw_href))
 
-                    # 1. 碰頭已掃描歷史記錄 -> 立即終止
-                    if state_manager.is_news_scanned(full_link):
+                    # ✅ 修復3: 使用本地 set 比對，而非 state_manager.is_news_scanned()
+                    if full_link in local_seen_links:
                         print(f"  🛑 [{self.name}] 碰頭歷史記錄，當前沒有最新消息更新。")
                         print(f"     └─ 標題: {title[:40]}...")
                         should_stop = True
                         break
 
-                    # 2. 解析時間
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
-                    # 3. 觸達 Cutoff 水位線 -> 立即終止
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                         print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
                         should_stop = True
@@ -234,6 +215,7 @@ class ZhitongFocusSource(BaseSource):
                         "link": full_link,
                         "time": pub_time_str
                     })
+                    local_seen_links.add(full_link)
                     state_manager.add_scanned(full_link)
                     page_added += 1
 
@@ -241,18 +223,6 @@ class ZhitongFocusSource(BaseSource):
                     if page_added == 0 and not should_stop:
                         print(f"  💤 [{self.name}] 第 {p} 頁全為歷史記錄，當前沒有最新消息更新。")
                     break
-
-        # ============================================================
-        # ✅ 診斷日誌：在開始抓取前，先印出 history.json 中已記錄的前 10 條
-        # ============================================================
-        existing_links = state_manager.get_all_scanned_news_links() if hasattr(state_manager, 'get_all_scanned_news_links') else []
-        print(f"\n  📚 [{self.name}] history.json 已記錄新聞 (前10條):")
-        if existing_links:
-            for idx, link in enumerate(existing_links[:10], 1):
-                print(f"     {idx:2d}. {link}")
-        else:
-            print(f"     (無歷史記錄)")
-        print()
 
         try:
             with DynamicSession(headless=True, stealth=True, timeout=25000) as sess:
