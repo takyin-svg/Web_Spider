@@ -10,7 +10,7 @@ from src.sources.base import BaseSource
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
-        self.mobile_url_pattern = "https://m.zhitongcaijing.com/market.html?page={}"
+        self.mobile_url_pattern = "https://m.zhitongcaijing.com/focus.html?page={}"
 
     def _parse_time_str(self, text: str) -> tuple[int, str]:
         now = datetime.now(HKT)
@@ -73,22 +73,19 @@ class ZhitongFocusSource(BaseSource):
     def fetch(self, state_manager, max_pages: int = 12) -> list[dict]:
         """
         抓取智通焦點新聞。
-        固定回溯 72 小時作為安全閥，實際邊界由「首次碰頭即停」精確控制。
+        ✅ 修正：取消「碰頭即停」，改為整頁掃描 + 單條去重。
+        僅在「整頁無新內容」或「觸達72h安全閥」時才停止翻頁。
         """
-        # ✅ 防禦性檢查：確保 max_pages 是整數，防止上層傳參錯誤導致崩潰
         if not isinstance(max_pages, int):
-            print(f"  ⚠️ [{self.name}] 偵測到 max_pages 參數類型錯誤 (收到 {type(max_pages).__name__})，已自動修正為預設值 12")
+            print(f"  ⚠️ [{self.name}] max_pages 類型錯誤 ({type(max_pages).__name__})，已修正為 12")
             max_pages = 12
 
         results = []
-        
-        # 1. 固定計算 72 小時 Cutoff
         now = datetime.now(HKT)
         cutoff_dt = now - timedelta(hours=72)
         cutoff_timestamp = int(cutoff_dt.timestamp())
         cutoff_dt_str = cutoff_dt.strftime('%Y-%m-%d %H:%M:%S')
-        
-        # 2. 日誌明確顯示
+
         print(f"  🔍 [{self.name}] 啟動手機版深度識別 (max_pages={max_pages}, 回溯上限: 72小時)")
         print(f"     └─ 目標時間下限: {cutoff_dt_str}")
 
@@ -111,49 +108,30 @@ class ZhitongFocusSource(BaseSource):
                         break
 
                 try:
-                    page.wait_for_selector('a[href*="detail"], a[href*="content_id"]', timeout=6000)
+                    page.wait_for_selector('a[href*="detail"], a[href*="content_id"], .news-item, .list-item', timeout=6000)
                 except Exception:
                     pass
 
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
-                    const aTags = Array.from(document.querySelectorAll('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]'));
-                    
-                    for (const a of aTags) {
+                    const containers = Array.from(document.querySelectorAll('.news-item, .list-item, li'));
+                    for (const card of containers) {
+                        const a = card.querySelector('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]');
+                        if (!a) continue;
                         let title = (a.innerText || a.textContent || '').trim();
                         title = title.split(/[|｜]/)[0].trim().replace(/\\s+/g, ' ');
-                        
                         const href = a.getAttribute('href') || '';
-                        if (title.length < 8 || !href || seenHrefs.has(href)) continue;
+                        if (title.length < 4 || !href || seenHrefs.has(href)) continue;
                         seenHrefs.add(href);
-
-                        let card = a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section');
-                        if (!card) {
-                            let el = a.parentElement;
-                            while (el && el !== document.body) {
-                                if (el.innerText && el.innerText.length > title.length + 3) {
-                                    card = el;
-                                    break;
-                                }
-                                el = el.parentElement;
-                            }
-                        }
-
                         let rawTime = '';
-                        if (card) {
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
-                            if (timeEl) {
-                                rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
-                            }
-                        }
-
-                        const cardText = card ? (card.innerText || card.textContent || '') : title;
+                        const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
+                        if (timeEl) rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
+                        const cardText = card.innerText || card.textContent || '';
                         if (!rawTime) {
                             const match = cardText.match(/(?:\\d{4}[-/])?\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\\s*\\d{1,2}:\\d{1,2}|\\b\\d{1,2}:\\d{1,2}(?::\\d{1,2})?\\b|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{1,2})?|\\d+\\s*(?:分鐘|分钟|小時|小时|分|h)\\s*前|剛剛|刚刚/);
                             if (match) rawTime = match[0];
                         }
-
                         results.push({ title, href, raw_time: rawTime });
                     }
                     return results;
@@ -163,8 +141,10 @@ class ZhitongFocusSource(BaseSource):
                     print(f"  ℹ️ [{self.name}] 第 {p} 頁無內容，停止翻頁。")
                     break
 
-                page_added = 0
+                page_new_count = 0
+                page_hit_cutoff = False
 
+                # ✅ 核心修正：遍歷整頁所有条目，不因單條舊聞而中斷
                 for item in batch:
                     title = item.get("title", "")
                     if any(w in title for w in ["登入", "登錄", "下載", "首頁", "版權所有"]):
@@ -177,23 +157,20 @@ class ZhitongFocusSource(BaseSource):
                         continue
                     scanned_in_session.add(full_link)
 
-                    # 首次碰頭即停
-                    if state_manager.is_news_scanned(full_link):
-                        print(f"  🛑 [{self.name}] 第 {p} 頁遇到已處理新聞 [{title[:30]}...]，確認進入舊聞區，結束翻頁。")
-                        should_stop = True
-                        break
-
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
-                    # Cutoff 時間下限
+                    # ✅ 72h 安全閥：超過下限直接標記並跳過該條
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
-                        print(f"  🛑 [{self.name}] 第 {p} 頁觸達時間下限 [{pub_time_str}]: [{title[:30]}...]，結束翻頁。")
-                        should_stop = True
-                        break
+                        page_hit_cutoff = True
+                        continue
 
                     if not pub_time_str:
                         pub_time_str = datetime.now(HKT).strftime('%Y-%m-%d %H:%M:%S')
+
+                    # ✅ 單條去重：已處理的新聞跳過，但不中斷整頁掃描
+                    if state_manager.is_news_scanned(full_link):
+                        continue
 
                     results.append({
                         "unique_id": full_link,
@@ -203,10 +180,20 @@ class ZhitongFocusSource(BaseSource):
                         "time": pub_time_str
                     })
                     state_manager.add_scanned(full_link)
-                    page_added += 1
+                    page_new_count += 1
 
-                if should_stop or page_added == 0:
+                # ✅ 停止條件：整頁都是舊聞（0條新增）且已觸達時間下限
+                if page_new_count == 0 and page_hit_cutoff:
+                    print(f"  🛑 [{self.name}] 第 {p} 頁全部為歷史內容且觸達72h下限，結束翻頁。")
+                    should_stop = True
                     break
+
+                # ✅ 如果整頁都是已處理過的新聞（非時間原因），也繼續往下翻
+                # 因為網站可能穿插了新文章在後面幾頁
+                if page_new_count == 0 and not page_hit_cutoff:
+                    print(f"  ℹ️ [{self.name}] 第 {p} 頁全部為已處理新聞，繼續檢查下一頁...")
+
+                print(f"  📄 [{self.name}] 第 {p} 頁掃描完成，本頁新增: {page_new_count} 條")
 
         try:
             with DynamicSession(headless=True, stealth=True, timeout=25000) as sess:
@@ -219,5 +206,5 @@ class ZhitongFocusSource(BaseSource):
         except Exception as e:
             print(f"  ⚠️ [{self.name}] 調度異常: {e}")
 
-        print(f"  └─ [{self.name}] 本次增量共收錄 {len(results)} 條新聞 (時間全部精準對齊)")
+        print(f"  └─ [{self.name}] 本次增量共收錄 {len(results)} 條新聞")
         return results
