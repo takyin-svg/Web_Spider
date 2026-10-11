@@ -1,11 +1,10 @@
-# src/sources/zhitong_focus.py 
+# src/sources/zhitong_focus.py
 import re
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 from scrapling.fetchers import DynamicSession
 from src.config import HKT
 from src.sources.base import BaseSource
-
 
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
@@ -83,17 +82,16 @@ class ZhitongFocusSource(BaseSource):
         cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S')
         print(f"  🔍 [{self.name}] 啟動手機版深度識別，目標時間下限: {cutoff_dt_str}")
 
-        consecutive_empty_pages = 0  # ✅ 連續空頁計數器
-        MAX_EMPTY_PAGES = 2          # ✅ 允許的最大連續空頁數
+        should_stop = False
 
         def page_action_handler(page):
-            nonlocal consecutive_empty_pages
+            nonlocal should_stop
             # 阻斷非必要圖片、字體與第三方追蹤
             page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
 
             for p in range(1, max_pages + 1):
                 target_url = self.mobile_url_pattern.format(p)
-
+                
                 # ⚡ 避免第 1 頁重複 goto: 第 1 頁已由 sess.fetch 載入，第 2 頁起才執行跳轉
                 if p > 1:
                     try:
@@ -103,15 +101,15 @@ class ZhitongFocusSource(BaseSource):
                         break
 
                 try:
-                    page.wait_for_selector('a[href*="/content/detail/"], a[href*="content_id"]', timeout=6000)
+                    page.wait_for_selector('a[href*="detail"], a[href*="content_id"]', timeout=6000)
                 except Exception:
                     pass
 
-                # 🚀 JS 向上錨定卡片抽取 (✅ 適配新版 div.info-list-item 結構)
+                # 🚀 JS 向上錨定卡片抽取
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
-                    const aTags = Array.from(document.querySelectorAll('a[href*="/content/detail/"], a[href*="content_id"]'));
+                    const aTags = Array.from(document.querySelectorAll('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]'));
                     
                     for (const a of aTags) {
                         const title = (a.innerText || a.textContent || '').trim();
@@ -119,8 +117,7 @@ class ZhitongFocusSource(BaseSource):
                         if (title.length < 8 || !href || seenHrefs.has(href)) continue;
                         seenHrefs.add(href);
 
-                        // ✅ 優先精確匹配新版卡片容器
-                        let card = a.closest('div.info-list-item') || a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section');
+                        let card = a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section');
                         if (!card) {
                             let p = a.parentElement;
                             while (p && p !== document.body) {
@@ -134,8 +131,7 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = '';
                         if (card) {
-                            // ✅ 優先精確匹配新版時間位置：operat區第一個span
-                            const timeEl = card.querySelector('.info-item-content-operat > span:first-child, .time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
+                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
                             if (timeEl) {
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
                             }
@@ -159,15 +155,9 @@ class ZhitongFocusSource(BaseSource):
                 }""")
 
                 if not batch:
-                    consecutive_empty_pages += 1
-                    if consecutive_empty_pages >= MAX_EMPTY_PAGES:
-                        print(f"  🛑 [{self.name}] 連續 {MAX_EMPTY_PAGES} 頁無數據，結束翻頁。")
-                        break
-                    continue
+                    break
 
                 page_added = 0
-                hit_cutoff = False  # ✅ 標記本頁是否觸達時間下限
-
                 for item in batch:
                     title = item.get("title", "")
                     if any(w in title for w in ["登入", "登錄", "下載", "首頁", "版權所有"]):
@@ -176,18 +166,20 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "")
                     full_link = urljoin(target_url, raw_href)
 
-                    # ✅ 修復核心：碰頭已掃描歷史記錄 -> 僅跳過當前條目，不再終止翻頁
+                    # 1. 碰頭已掃描歷史記錄 -> 立即終止
                     if state_manager.is_news_scanned(full_link):
-                        continue
+                        print(f"  🛑 [{self.name}] 碰頭歷史記錄 [{title[:25]}...]，結束翻頁。")
+                        should_stop = True
+                        break
 
-                    # 解析時間
+                    # 2. 解析時間
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
-                    # 觸達 Cutoff 水位線 -> 標記並跳出當前頁面循環
+                    # 3. 觸達 16:00 水位線 (翻到昨日新聞) -> 立即終止
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                         print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
-                        hit_cutoff = True
+                        should_stop = True
                         break
 
                     if not pub_time_str:
@@ -203,16 +195,7 @@ class ZhitongFocusSource(BaseSource):
                     state_manager.add_scanned(full_link)
                     page_added += 1
 
-                # ✅ 更新連續空頁計數
-                if page_added == 0 and not hit_cutoff:
-                    consecutive_empty_pages += 1
-                else:
-                    consecutive_empty_pages = 0  # 有新增或觸達下限，重置計數器
-
-                # ✅ 終止條件：觸達時間下限 OR 連續空頁超標
-                if hit_cutoff or consecutive_empty_pages >= MAX_EMPTY_PAGES:
-                    if consecutive_empty_pages >= MAX_EMPTY_PAGES:
-                        print(f"  🛑 [{self.name}] 連續 {MAX_EMPTY_PAGES} 頁無新增數據，結束翻頁。")
+                if should_stop or page_added == 0:
                     break
 
         try:
