@@ -1,4 +1,5 @@
 # src/sources/zhitong_focus.py
+# src/sources/zhitong_focus.py
 import re
 from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse, parse_qs
@@ -92,7 +93,7 @@ class ZhitongFocusSource(BaseSource):
         cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S')
         print(f"  🔍 [{self.name}] 啟動手機版深度識別，目標時間下限: {cutoff_dt_str}")
 
-        # ✅ 修復1: 建立本地 seen set，繞過可能有問題的 state_manager.is_news_scanned()
+        # ✅ 建立本地 seen set，繞過可能有問題的 state_manager.is_news_scanned()
         local_seen_links: set[str] = set()
         try:
             existing = state_manager.get_all_scanned_news_links() if hasattr(state_manager, 'get_all_scanned_news_links') else []
@@ -117,21 +118,90 @@ class ZhitongFocusSource(BaseSource):
                         print(f"  ⚠️ [{self.name}] 第 {p} 頁開啟超時: {e}")
                         break
 
-                try:
-                    page.wait_for_selector('.home-list-scroll .info-list-item a[href*="detail"]', timeout=6000)
-                except Exception:
-                    pass
+                # ✅ 修復1: 多層級容錯等待，不再依賴單一選擇器
+                selectors_to_try = [
+                    '.home-list-scroll .info-list-item',
+                    '.info-list-item',
+                    'a[href*="/content/detail/"]',
+                ]
+                waited = False
+                for sel in selectors_to_try:
+                    try:
+                        page.wait_for_selector(sel, timeout=4000)
+                        waited = True
+                        break
+                    except Exception:
+                        continue
+                if not waited:
+                    print(f"  💤 [{self.name}] 第 {p} 頁未找到任何新聞容器，當前沒有最新消息更新。")
+                    break
 
-                # ✅ 修復2: JS 選擇器強制限定在 .home-list-scroll .info-list-item 內
-                # 避免抓到側邊欄、推薦區或隱藏區塊的舊連結
+                # ✅ 修復2: JS 內建多層級容錯選擇器 + 容器探測日誌
                 batch = page.evaluate("""() => {
                     const results = [];
                     const seenHrefs = new Set();
-                    // 強制限定在首頁新聞列表容器內
-                    const items = Array.from(document.querySelectorAll('.home-list-scroll .info-list-item'));
 
+                    // 多層級容錯：依序嘗試不同容器選擇器
+                    const containerSelectors = [
+                        '.home-list-scroll .info-list-item',
+                        '.info-list-item',
+                        '[class*="list-item"]',
+                        '[class*="news-item"]',
+                        '[class*="article-item"]',
+                    ];
+
+                    let items = [];
+                    let matchedSelector = '(none)';
+                    for (const sel of containerSelectors) {
+                        items = Array.from(document.querySelectorAll(sel));
+                        if (items.length > 0) {
+                            matchedSelector = sel;
+                            break;
+                        }
+                    }
+
+                    // 最後防線：若所有容器都找不到，直接從所有 detail 連結向上回溯卡片
+                    if (items.length === 0) {
+                        matchedSelector = 'fallback: a[href*="/content/detail/"] upward traversal';
+                        const allLinks = Array.from(document.querySelectorAll('a[href*="/content/detail/"]'));
+                        for (const a of allLinks) {
+                            const title = (a.innerText || a.textContent || '').trim();
+                            const href = a.getAttribute('href') || '';
+                            if (title.length < 8 || !href || seenHrefs.has(href)) continue;
+                            seenHrefs.add(href);
+
+                            // 向上回溯找到最近的卡片容器
+                            let card = a.closest('li') || a.closest('div[class*="item"]') || a.closest('section');
+                            if (!card) {
+                                let parent = a.parentElement;
+                                while (parent && parent !== document.body) {
+                                    if (parent.innerText && parent.innerText.length > title.length + 10) {
+                                        card = parent;
+                                        break;
+                                    }
+                                    parent = parent.parentElement;
+                                }
+                            }
+
+                            let rawTime = '';
+                            if (card) {
+                                const timeEl = card.querySelector('[class*="time"], [class*="date"], span:first-child');
+                                if (timeEl) rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
+                            }
+                            if (!rawTime) {
+                                const cardText = card ? (card.innerText || '') : title;
+                                const match = cardText.match(/(?:\\d{4}[-/])?\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\\s*\\d{1,2}:\\d{1,2}|\\b\\d{1,2}:\\d{1,2}(?::\\d{1,2})?\\b|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{1,2})?|\\d+\\s*(?:分鐘|分钟|小時|小时|分|h)\\s*前|剛剛|刚刚/);
+                                if (match) rawTime = match[0];
+                            }
+
+                            results.push({ title: title.replace(/\\s+/g, ' '), href, raw_time: rawTime });
+                        }
+                        return { matched_selector: matchedSelector, items: results };
+                    }
+
+                    // 正常路徑：從容器內提取
                     for (const item of items) {
-                        const a = item.querySelector('a[href*="/content/detail/"]');
+                        const a = item.querySelector('a[href*="/content/detail/"]') || item.closest('a[href*="/content/detail/"]');
                         if (!a) continue;
 
                         const title = (a.innerText || a.textContent || '').trim();
@@ -139,39 +209,36 @@ class ZhitongFocusSource(BaseSource):
                         if (title.length < 8 || !href || seenHrefs.has(href)) continue;
                         seenHrefs.add(href);
 
-                        // 時間提取：優先從 .info-item-content-operat 第一個 span
                         let rawTime = '';
-                        const operatDiv = item.querySelector('.info-item-content-operat');
-                        if (operatDiv) {
-                            const timeSpan = operatDiv.querySelector('span:first-child');
-                            if (timeSpan) {
-                                rawTime = (timeSpan.innerText || timeSpan.textContent || '').trim();
-                            }
-                        }
+                        const timeEl = item.querySelector('[class*="time"], [class*="date"], [class*="operat"] span:first-child, span:first-child');
+                        if (timeEl) rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
 
-                        // 備用：正則從卡片文字中提取
                         if (!rawTime) {
                             const cardText = item.innerText || '';
                             const match = cardText.match(/(?:\\d{4}[-/])?\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\\s*\\d{1,2}:\\d{1,2}|\\b\\d{1,2}:\\d{1,2}(?::\\d{1,2})?\\b|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{1,2})?|\\d+\\s*(?:分鐘|分钟|小時|小时|分|h)\\s*前|剛剛|刚刚/);
                             if (match) rawTime = match[0];
                         }
 
-                        results.push({
-                            title: title.replace(/\\s+/g, ' '),
-                            href: href,
-                            raw_time: rawTime
-                        });
+                        results.push({ title: title.replace(/\\s+/g, ' '), href, raw_time: rawTime });
                     }
-                    return results;
+
+                    return { matched_selector: matchedSelector, items: results };
                 }""")
 
-                if not batch:
+                # ✅ 解析 JS 返回的結構化結果
+                matched_selector = batch.get("matched_selector", "(unknown)") if isinstance(batch, dict) else "(legacy)"
+                items = batch.get("items", []) if isinstance(batch, dict) else batch
+
+                # 診斷日誌：印出實際命中的選擇器
+                print(f"  🎯 [{self.name}] 第 {p} 頁命中選擇器: {matched_selector} (共 {len(items)} 條)")
+
+                if not items:
                     print(f"  💤 [{self.name}] 第 {p} 頁無任何數據，當前沒有最新消息更新。")
                     break
 
                 # === 診斷日誌：印出網頁上實際抓到的前 10 條 ===
                 print(f"\n  📋 [{self.name}] 第 {p} 頁抓取結果 (前10條):")
-                for idx, item in enumerate(batch[:10], 1):
+                for idx, item in enumerate(items[:10], 1):
                     raw_href = item.get("href", "")
                     full_link_raw = urljoin(target_url, raw_href)
                     normalized = self._normalize_url(full_link_raw)
@@ -182,7 +249,7 @@ class ZhitongFocusSource(BaseSource):
                 print()
 
                 page_added = 0
-                for item in batch:
+                for item in items:
                     title = item.get("title", "")
                     if any(w in title for w in ["登入", "登錄", "下載", "首頁", "版權所有"]):
                         continue
@@ -190,7 +257,6 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "")
                     full_link = self._normalize_url(urljoin(target_url, raw_href))
 
-                    # ✅ 修復3: 使用本地 set 比對，而非 state_manager.is_news_scanned()
                     if full_link in local_seen_links:
                         print(f"  🛑 [{self.name}] 碰頭歷史記錄，當前沒有最新消息更新。")
                         print(f"     └─ 標題: {title[:40]}...")
