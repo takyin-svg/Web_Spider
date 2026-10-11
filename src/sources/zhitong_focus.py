@@ -1,7 +1,8 @@
 # src/sources/zhitong_focus.py
+# src/sources/zhitong_focus.py
 import re
 from datetime import datetime, timedelta
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, parse_qs
 from scrapling.fetchers import DynamicSession
 from src.config import HKT
 from src.sources.base import BaseSource
@@ -10,6 +11,33 @@ class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
         self.mobile_url_pattern = "https://m.zhitongcaijing.com/market.html?page={}"
+
+    def _normalize_url(self, url: str) -> str:
+        """
+        ✅ 核心修復：URL 標準化
+        強制將不同格式的文章連結統一轉換為 share.html?content_id=XXX 格式，
+        確保與 history.json 中的記錄能精準比對，防止重複抓取。
+        """
+        if not url:
+            return ""
+        
+        # 1. 嘗試從 Query String 提取 (例如: share.html?content_id=123)
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query)
+        if 'content_id' in qs:
+            return f"https://m.zhitongcaijing.com/article/share.html?content_id={qs['content_id'][0]}"
+            
+        # 2. 嘗試從 Path 路徑提取 (例如: /content/detail/1505550.html)
+        match = re.search(r'/content/detail/(\d+)', url)
+        if match:
+            return f"https://m.zhitongcaijing.com/article/share.html?content_id={match.group(1)}"
+            
+        # 3. 最後防線：直接用正則提取 URL 中的連續數字 ID
+        match = re.search(r'content_id=(\d+)', url) or re.search(r'/(\d{6,})(?:\.html)?$', url)
+        if match:
+            return f"https://m.zhitongcaijing.com/article/share.html?content_id={match.group(1)}"
+            
+        return url
 
     def _parse_time_str(self, text: str) -> tuple[int, str]:
         now = datetime.now(HKT)
@@ -69,7 +97,6 @@ class ZhitongFocusSource(BaseSource):
             year = now.year
             month = int(m_cn.group(1))
             day = int(m_cn.group(2))
-            # 若無明確時分，設為 22:00:00，確保當天新聞被完整收錄，遇昨日新聞才剎車
             hour = int(m_cn.group(3)) if m_cn.group(3) else 22
             minute = int(m_cn.group(4)) if m_cn.group(4) else 0
             dt = datetime(year, month, day, hour, minute, 0, tzinfo=HKT)
@@ -86,13 +113,11 @@ class ZhitongFocusSource(BaseSource):
 
         def page_action_handler(page):
             nonlocal should_stop
-            # 阻斷非必要圖片、字體與第三方追蹤
             page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
 
             for p in range(1, max_pages + 1):
                 target_url = self.mobile_url_pattern.format(p)
                 
-                # ⚡ 避免第 1 頁重複 goto: 第 1 頁已由 sess.fetch 載入，第 2 頁起才執行跳轉
                 if p > 1:
                     try:
                         page.goto(target_url, wait_until="domcontentloaded", timeout=18000)
@@ -117,7 +142,7 @@ class ZhitongFocusSource(BaseSource):
                         if (title.length < 8 || !href || seenHrefs.has(href)) continue;
                         seenHrefs.add(href);
 
-                        let card = a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section');
+                        let card = a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section') || a.closest('div.info-list-item');
                         if (!card) {
                             let p = a.parentElement;
                             while (p && p !== document.body) {
@@ -131,7 +156,7 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = '';
                         if (card) {
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
+                            const timeEl = card.querySelector('.info-item-content-operat > span:first-child, .time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
                             if (timeEl) {
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
                             }
@@ -155,6 +180,7 @@ class ZhitongFocusSource(BaseSource):
                 }""")
 
                 if not batch:
+                    print(f"  💤 [{self.name}] 第 {p} 頁無任何數據，當前沒有最新消息更新。")
                     break
 
                 page_added = 0
@@ -164,11 +190,15 @@ class ZhitongFocusSource(BaseSource):
                         continue
 
                     raw_href = item.get("href", "")
-                    full_link = urljoin(target_url, raw_href)
+                    full_link_raw = urljoin(target_url, raw_href)
+                    
+                    # ✅ 核心修復：強制標準化 URL，確保能與 history.json 中的 ID 精準比對
+                    full_link = self._normalize_url(full_link_raw)
 
-                    # 1. 碰頭已掃描歷史記錄 -> 立即終止
+                    # 1. 碰頭已掃描歷史記錄 -> 立即終止 (因為列表是由新到舊)
                     if state_manager.is_news_scanned(full_link):
-                        print(f"  🛑 [{self.name}] 碰頭歷史記錄 [{title[:25]}...]，結束翻頁。")
+                        print(f"  🛑 [{self.name}] 碰頭歷史記錄，當前沒有最新消息更新。")
+                        print(f"     └─ 標題: {title[:40]}...")
                         should_stop = True
                         break
 
@@ -176,7 +206,7 @@ class ZhitongFocusSource(BaseSource):
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
-                    # 3. 觸達 16:00 水位線 (翻到昨日新聞) -> 立即終止
+                    # 3. 觸達 Cutoff 水位線 -> 立即終止
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                         print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
                         should_stop = True
@@ -195,12 +225,14 @@ class ZhitongFocusSource(BaseSource):
                     state_manager.add_scanned(full_link)
                     page_added += 1
 
+                # ✅ 整頁皆為歷史記錄或無新增時，輸出明確提示
                 if should_stop or page_added == 0:
+                    if page_added == 0 and not should_stop:
+                        print(f"  💤 [{self.name}] 第 {p} 頁全為歷史記錄，當前沒有最新消息更新。")
                     break
 
         try:
             with DynamicSession(headless=True, stealth=True, timeout=25000) as sess:
-                # ⚡ 顯式進入第 1 頁，只等待 DOM 骨架構建完成，防止連線掛起
                 sess.fetch(
                     self.mobile_url_pattern.format(1),
                     wait_until="domcontentloaded",
