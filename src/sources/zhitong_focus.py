@@ -1,208 +1,169 @@
 # src/sources/zhitong_focus.py 
-import re 
-from datetime import datetime, timedelta 
-from urllib.parse import urljoin 
-from scrapling.fetchers import DynamicSession 
-from src.config import HKT 
-from src.sources.base import BaseSource 
+import time
+import re
+from datetime import datetime, timedelta
+from scrapling.fetchers import DynamicSession
 
-class ZhitongFocusSource(BaseSource): 
-    def __init__(self): 
-        super().__init__("智通焦點") 
-        self.mobile_url_pattern = "https://m.zhitongcaijing.com/market.html?page={}" 
+from src.base_source import BaseSource
 
-    def _parse_time_str(self, text: str) -> tuple[int, str]: 
-        now = datetime.now(HKT) 
-        text = str(text).strip() 
-        if not text: 
-            return 0, "" 
 
-        # 1. 剛剛 / 刚刚 
-        if any(k in text for k in ["剛", "刚"]): 
-            ts = int(now.timestamp()) 
-            return ts, now.strftime('%Y-%m-%d %H:%M:%S') 
+class ZhitongFocusSource(BaseSource):
+    def __init__(self, state_manager):
+        super().__init__(state_manager)
+        self.name = "智通焦點"
+        self.base_url = "https://www.zhitongcaijing.com/content/market.html?page={}"
+        self.fetcher = DynamicSession(
+            headless=True,
+            disable_images=True,
+        )
 
-        # 2. 相對時間：分鐘前 / 小時前 
-        m_min = re.search(r'(\d+)\s*(?:分鐘|分钟|分)\s*前', text) 
-        if m_min: 
-            ts = int(now.timestamp()) - int(m_min.group(1)) * 60 
-            return ts, datetime.fromtimestamp(ts, HKT).strftime('%Y-%m-%d %H:%M:%S') 
+    def _parse_time_str(self, time_str):
+        """
+        解析智通財經的時間字符串，支援多種格式：
+        - "剛剛" / "刚才"
+        - "X分鐘前" / "X小時前"
+        - "昨天 HH:MM" / "前天 HH:MM"
+        - "YYYY-MM-DD HH:MM" / "MM-DD HH:MM"
+        - "今天 HH:MM" / 純時間 "HH:MM"
+        - "X月X日 HH:MM" / "X月X日"
+        """
+        if not time_str:
+            return None
 
-        m_hr = re.search(r'(\d+)\s*(?:小時|小时|h)\s*前', text) 
-        if m_hr: 
-            ts = int(now.timestamp()) - int(m_hr.group(1)) * 3600 
-            return ts, datetime.fromtimestamp(ts, HKT).strftime('%Y-%m-%d %H:%M:%S') 
+        time_str = time_str.strip()
+        now = datetime.now()
 
-        # 3. 昨天 / 前天 
-        m_yest = re.search(r'(?:昨[天日]|前[天日])\s*(\d{1,2}):(\d{1,2})', text) 
-        if m_yest: 
-            days_ago = 2 if "前" in m_yest.group(0) else 1 
-            target_day = now - timedelta(days=days_ago) 
-            h, m = int(m_yest.group(1)), int(m_yest.group(2)) 
-            dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0) 
-            return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S') 
+        # 1. "剛剛" / "刚才"
+        if time_str in ("剛剛", "刚才"):
+            return int(now.timestamp())
 
-        # 4. YYYY-MM-DD HH:MM 或 MM-DD HH:MM 
-        m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text) 
-        if m_date_time: 
-            year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year 
-            month = int(m_date_time.group(2)) 
-            day = int(m_date_time.group(3)) 
-            hour = int(m_date_time.group(4)) 
-            minute = int(m_date_time.group(5)) 
-            second = int(m_date_time.group(6)) if m_date_time.group(6) else 0 
-            dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT) 
-            return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S') 
+        # 2. "X分鐘前" / "X小時前"
+        m = re.match(r'(\d+)\s*分鐘前', time_str)
+        if m:
+            return int((now - timedelta(minutes=int(m.group(1)))).timestamp())
+        m = re.match(r'(\d+)\s*小時前', time_str)
+        if m:
+            return int((now - timedelta(hours=int(m.group(1)))).timestamp())
 
-        # 5. 純當日時間 18:30 或 今天 18:30 
-        m_today = re.search(r'(?:(?:今[天日])\s*)?(\b\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\b', text) 
-        if m_today and not re.search(r'\d{1,2}[-/月]\d{1,2}', text): 
-            h, m = int(m_today.group(1)), int(m_today.group(2)) 
-            s = int(m_today.group(3)) if m_today.group(3) else 0 
-            if 0 <= h <= 23 and 0 <= m <= 59: 
-                dt = now.replace(hour=h, minute=m, second=s, microsecond=0) 
-                return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S') 
+        # 3. "昨天/前天 HH:MM"
+        m = re.match(r'(昨天|前天)\s+(\d{1,2}:\d{2})', time_str)
+        if m:
+            days_ago = 1 if m.group(1) == '昨天' else 2
+            target_date = now - timedelta(days=days_ago)
+            dt = datetime.strptime(f"{target_date.strftime('%Y-%m-%d')} {m.group(2)}", "%Y-%m-%d %H:%M")
+            return int(dt.timestamp())
 
-        # 6. 中文日期 10月9日 18:30 或 10月9日 
-        m_cn = re.search(r'(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', text) 
-        if m_cn: 
-            year = now.year 
-            month = int(m_cn.group(1)) 
-            day = int(m_cn.group(2)) 
-            hour = int(m_cn.group(3)) if m_cn.group(3) else 22 
-            minute = int(m_cn.group(4)) if m_cn.group(4) else 0 
-            dt = datetime(year, month, day, hour, minute, 0, tzinfo=HKT) 
-            return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S') 
+        # 4. "YYYY-MM-DD HH:MM" 或 "MM-DD HH:MM"
+        m = re.match(r'(\d{2,4}-\d{1,2}-\d{1,2})\s+(\d{1,2}:\d{2})', time_str)
+        if m:
+            date_part = m.group(1)
+            if len(date_part.split('-')[0]) == 2:
+                date_part = f"{now.year}-{date_part}"
+            dt = datetime.strptime(f"{date_part} {m.group(2)}", "%Y-%m-%d %H:%M")
+            return int(dt.timestamp())
 
-        return 0, "" 
+        # 5. "今天 HH:MM" 或 純時間 "HH:MM"
+        m = re.match(r'(?:今天\s+)?(\d{1,2}:\d{2})', time_str)
+        if m:
+            dt = datetime.strptime(f"{now.strftime('%Y-%m-%d')} {m.group(1)}", "%Y-%m-%d %H:%M")
+            return int(dt.timestamp())
 
-    def fetch(self, cutoff_timestamp: int, state_manager, max_pages: int = 8) -> list[dict]: 
-        results = [] 
-        cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S') 
-        print(f"  🔍 [{self.name}] 啟動手機版深度識別，目標時間下限: {cutoff_dt_str}") 
+        # 6. "X月X日 HH:MM" 或 "X月X日"
+        m = re.match(r'(\d{1,2})月(\d{1,2})日(?:\s+(\d{1,2}:\d{2}))?', time_str)
+        if m:
+            month, day = int(m.group(1)), int(m.group(2))
+            time_part = m.group(3) if m.group(3) else "00:00"
+            dt = datetime.strptime(f"{now.year}-{month:02d}-{day:02d} {time_part}", "%Y-%m-%d %H:%M")
+            return int(dt.timestamp())
 
-        should_stop = False 
+        return None
 
-        def page_action_handler(page): 
-            nonlocal should_stop 
-            page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort()) 
+    def fetch(self, cutoff_ts, existing_links):
+        results = []
+        should_stop = False
+        
+        # 🔧 修復：新增連續空頁計數器，防止因單頁無新消息而過早終止翻頁
+        consecutive_empty_pages = 0
+        MAX_CONSECUTIVE_EMPTY_PAGES = 2
 
-            for p in range(1, max_pages + 1): 
-                target_url = self.mobile_url_pattern.format(p) 
-                 
-                if p > 1: 
-                    try: 
-                        page.goto(target_url, wait_until="domcontentloaded", timeout=18000) 
-                    except Exception as e: 
-                        print(f"  ⚠️ [{self.name}] 第 {p} 頁開啟超時: {e}") 
-                        break 
+        for page in range(1, 9):  # 最多爬取8頁
+            url = self.base_url.format(page)
+            print(f"  🌐 [{self.name}] 正在爬取第 {page} 頁: {url}")
 
-                try: 
-                    page.wait_for_selector('a[href*="detail"], a[href*="content_id"]', timeout=6000) 
-                except Exception: 
-                    pass 
+            try:
+                response = self.fetcher.get(url, timeout=30)
+                
+                # 透過 JS 提取新聞卡片數據
+                js_script = """
+                return Array.from(document.querySelectorAll('.news-list li, .news_item, .list_item')).map(item => {
+                    const a = item.querySelector('a');
+                    const timeEl = item.querySelector('.time, .date, .news-time');
+                    return {
+                        title: a ? a.innerText.trim() : '',
+                        link: a ? a.getAttribute('href') : '',
+                        time: timeEl ? timeEl.innerText.trim() : ''
+                    };
+                }).filter(item => item.title && item.link);
+                """
+                cards = response.js.execute(js_script)
 
-                # 🛠️ 修正 JS 語法中的引號配對錯誤 (補齊 [class*="date"])
-                batch = page.evaluate("""() => { 
-                    const results = []; 
-                    const seenHrefs = new Set(); 
-                    const aTags = Array.from(document.querySelectorAll('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]')); 
-                     
-                    for (const a of aTags) { 
-                        const title = (a.innerText || a.textContent || '').trim(); 
-                        const href = a.getAttribute('href') || ''; 
-                        if (title.length < 8 || !href || seenHrefs.has(href)) continue; 
-                        seenHrefs.add(href); 
+                if not cards:
+                    print(f"  ⚠️ [{self.name}] 第 {page} 頁未找到新聞卡片。")
+                    break
 
-                        let card = a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section'); 
-                        if (!card) { 
-                            let p = a.parentElement; 
-                            while (p && p !== document.body) { 
-                                if (p.innerText && p.innerText.length > title.length + 3) { 
-                                    card = p; 
-                                    break; 
-                                } 
-                                p = p.parentElement; 
-                            } 
-                        } 
+                page_added = 0
+                for card in cards:
+                    title = card.get('title', '').strip()
+                    link = card.get('link', '').strip()
+                    pub_time_str = card.get('time', '').strip()
 
-                        let rawTime = ''; 
-                        if (card) { 
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime'); 
-                            if (timeEl) { 
-                                rawTime = (timeEl.innerText || timeEl.textContent || '').trim(); 
-                            } 
-                        } 
+                    if not title or not link:
+                        continue
 
-                        const cardText = card ? (card.innerText || card.textContent || '') : title; 
-                        if (!rawTime) { 
-                            const match = cardText.match(/(?:\\d{4}[-/])?\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\\s*\\d{1,2}:\\d{1,2}|\\b\\d{1,2}:\\d{1,2}(?::\\d{1,2})?\\b|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{1,2})?|\\d+\\s*(?:分鐘|分钟|小時|小时|分|h)\\s*前|剛剛|刚刚/); 
-                            if (match) { 
-                                rawTime = match[0]; 
-                            } 
-                        } 
+                    full_link = link if link.startswith('http') else f"https://www.zhitongcaijing.com{link}"
 
-                        results.push({ 
-                            title: title.replace(/\\s+/g, ' '), 
-                            href: href, 
-                            raw_time: rawTime 
-                        }); 
-                    } 
-                    return results; 
-                }""") 
+                    # 🔧 修復：碰頭已掃描歷史記錄 -> 跳過該條，繼續檢查同頁剩餘新聞 (原為 break)
+                    if self.state_manager.is_news_scanned(full_link):
+                        print(f"  ⏭️ [{self.name}] 跳過已掃描記錄 [{title[:25]}...]")
+                        continue  # 原為: should_stop = True; break
 
-                if not batch: 
-                    break 
+                    # 解析時間
+                    pub_ts = self._parse_time_str(pub_time_str)
+                    if pub_ts is None:
+                        print(f"  ⚠️ [{self.name}] 無法解析時間: '{pub_time_str}'，標題: {title[:20]}...")
+                        pub_ts = time.time()
 
-                page_added = 0 
-                for item in batch: 
-                    title = item.get("title", "") 
-                    if any(w in title for w in ["登入", "登錄", "下載", "首頁", "版權所有"]): 
-                        continue 
+                    # 觸達時間下限 -> 終止
+                    if
+                    if pub_ts <= cutoff_ts:
+                        print(f"  ⏱️ [{self.name}] 觸達時間下限 [{title[:25]}...]，結束翻頁。")
+                        should_stop = True
+                        break
 
-                    raw_href = item.get("href", "") 
-                    full_link = urljoin(target_url, raw_href) 
+                    # 加入結果並標記為已掃描
+                    results.append({
+                        'title': title,
+                        'link': full_link,
+                        'timestamp': pub_ts,
+                        'source': self.name
+                    })
+                    self.state_manager.mark_news_scanned(full_link)
+                    page_added += 1
 
-                    # 碰頭歷史記錄時改為 continue 跳過，確保能抓取上方的最新更新新聞
-                    if state_manager.is_news_scanned(full_link): 
-                        continue 
+                # 🔧 修復：翻頁終止條件邏輯重構
+                if should_stop:
+                    break
+                
+                if page_added == 0:
+                    consecutive_empty_pages += 1
+                    if consecutive_empty_pages >= MAX_CONSECUTIVE_EMPTY_PAGES:
+                        print(f"  ⚠️ [{self.name}] 連續 {MAX_CONSECUTIVE_EMPTY_PAGES} 頁無新消息，結束翻頁。")
+                        break
+                else:
+                    consecutive_empty_pages = 0  # 有新消息則重置計數
 
-                    # 2. 解析時間 
-                    raw_time = item.get("raw_time", "") 
-                    pub_ts, pub_time_str = self._parse_time_str(raw_time) 
+            except Exception as e:
+                print(f"  ❌ [{self.name}] 爬取第 {page} 頁出錯: {e}")
+                break
 
-                    # 3. 觸達 16:00 水位線 (翻到昨日新聞) -> 立即終止 
-                    if pub_ts > 0 and pub_ts <= cutoff_timestamp: 
-                        print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。") 
-                        should_stop = True 
-                        break 
-
-                    if not pub_time_str: 
-                        pub_time_str = datetime.now(HKT).strftime('%Y-%m-%d %H:%M:%S') 
-
-                    results.append({ 
-                        "unique_id": full_link, 
-                        "title": title, 
-                        "source": self.name, 
-                        "link": full_link, 
-                        "time": pub_time_str 
-                    }) 
-                    state_manager.add_scanned(full_link) 
-                    page_added += 1 
-
-                if should_stop: 
-                    break 
-
-        try: 
-            with DynamicSession(headless=True, stealth=True, timeout=25000) as sess: 
-                sess.fetch( 
-                    self.mobile_url_pattern.format(1), 
-                    wait_until="domcontentloaded", 
-                    network_idle=False, 
-                    page_action=page_action_handler 
-                ) 
-        except Exception as e: 
-            print(f"  ⚠️ [{self.name}] 調度異常: {e}") 
-
-        print(f"  └─ [{self.name}] 本次增量共收錄 {len(results)} 條新聞 (時間全部精準對齊)") 
         return results
