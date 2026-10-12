@@ -127,7 +127,7 @@ class Orchestrator:
             if now >= end_time:
                 break
 
-            sleep_seconds = random.randint(3 * 60, 10 * 60)
+            sleep_seconds = random.randint(3 * 60, 8 * 60)
             if now + timedelta(seconds=sleep_seconds) > end_time:
                 remaining = (end_time - now).total_seconds()
                 if remaining > 180:
