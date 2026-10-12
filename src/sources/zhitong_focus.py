@@ -77,7 +77,7 @@ class ZhitongFocusSource(BaseSource):
 
         return 0, ""
 
-    def fetch(self, cutoff_timestamp: int, state_manager, max_pages: int = 8) -> list[dict]:
+    def fetch(self, cutoff_timestamp: int, state_manager, max_pages: int = 10) -> list[dict]:
         results = []
         cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S')
         print(f"  🔍 [{self.name}] 啟動手機版深度識別，目標時間下限: {cutoff_dt_str}")
