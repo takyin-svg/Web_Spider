@@ -63,7 +63,7 @@ class GeminiAnalyzer:
         analyzed_results = []
         
         max_retries = 3
-        wait_times = [10, 30, 60]
+        wait_times = [30, 60, 90]
         
         for attempt in range(1, max_retries + 1):
             try:
