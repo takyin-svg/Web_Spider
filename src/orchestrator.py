@@ -23,9 +23,9 @@ class Orchestrator:
                 end += timedelta(days=1)
             return "夜間 (昨收16:00後至此刻)", end
 
-        # 早盤前時段: 05:00 - 10:00
-        elif 5 <= hour < 10:
-            end = now.replace(hour=10, minute=0, second=0, microsecond=0)
+        # 早盤前時段: 05:00 - 10:30
+        elif 5 <= hour < 10 or (hour == 10 and minute < 30):
+            end = now.replace(hour=10, minute=30, second=0, microsecond=0)
             return "早盤前 (橫跨週末/昨夜至今日開盤)", end
 
         # 盤中交易時段: 10:30 - 15:30
