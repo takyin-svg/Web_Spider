@@ -52,7 +52,7 @@ class Orchestrator:
         # 🚨 關鍵防護：若本次因網路逾時或異常導致抓取量為 0，絕對不更新 history.json 的 Cutoff 時間戳！
         if not raw_news:
             print("📭 本次採集為空（可能遇網路逾時或暫無更新），保留原 Cutoff 留待下輪重試，不更新狀態。")
-            state_mgr.save()  # 不傳入新時間戳，保持原有水位線
+            state_mgr.save()
             return
 
         # 2. 關鍵字初篩與同事件去重
@@ -62,14 +62,18 @@ class Orchestrator:
             state_mgr.save(int(now.timestamp()))
             return
 
-        # 3. AI 批次分析
-        print(f"🤖 共有 {len(filtered_news)} 條新聞進入 Gemini 深度量化分析...")
+        # 3. AI 批次分析 (修復：錨定總數，確保所有提煉新聞都被處理)
+        total_count = len(filtered_news)
+        print(f"🤖 共有 {total_count} 條新聞進入 Gemini 深度量化分析...")
         analyzed_results = []
         batch_size = 20
 
-        for i in range(0, len(filtered_news), batch_size):
+        for i in range(0, total_count, batch_size):
             batch = filtered_news[i:i + batch_size]
-            print(f"🧠 開始將第 {i+1} 至 {min(i+batch_size, len(filtered_news))} 條新聞送入 AI 分析...")
+            batch_num = i // batch_size + 1
+            end_idx = min(i + batch_size, total_count)
+            
+            print(f"🧠 [批次 {batch_num}] 開始將第 {i+1} 至 {end_idx} 條新聞 (共 {len(batch)} 條) 送入 AI 分析...")
             
             batch_res = analyzer.analyze(batch)
             if batch_res is not None:
@@ -77,7 +81,7 @@ class Orchestrator:
                     state_mgr.add_analyzed_record(item.get("unique_id"), event="AI_PROCESSED")
                 analyzed_results.extend(batch_res)
             else:
-                print(f"⚠️ 第 {i+1} 批次 AI 分析異常，將留待下輪重試。")
+                print(f"⚠️ [批次 {batch_num}] AI 分析異常，該批次 {len(batch)} 條新聞將留待下輪重試。")
 
         # 4. 飛書推送 (動態讀取 MIN_SCORE)
         if analyzed_results:
