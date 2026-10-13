@@ -195,7 +195,7 @@ class ZhitongFocusSource(BaseSource):
                     break
 
         try:
-            with DynamicSession(headless=True, stealth=True, timeout=30000) as sess:
+            with DynamicSession(headless=True, stealth=True, timeout=45000) as sess:
                 sess.fetch(
                     "https://m.zhitongcaijing.com/market.html",
                     wait_until="domcontentloaded",
