@@ -10,7 +10,11 @@ from src.filters import NewsFilter
 from src.analyzer import GeminiAnalyzer
 from src.feishu_notifier import FeishuNotifier
 
+
 class Orchestrator:
+    # AI 分析最大重試次數
+    MAX_AI_RETRIES = 6
+
     def _get_window(self):
         """依據香港時間判定當前運作時段與結束時間"""
         now = datetime.now(HKT)
@@ -36,6 +40,54 @@ class Orchestrator:
         # 自訂/測試時段
         return "自訂/測試時段", now + timedelta(minutes=60)
 
+    def _calculate_backoff(self, attempt: int) -> float:
+        """
+        計算指數退避等待時間:
+        - 第1次失敗後等 30s
+        - 第2次失敗後等 60s
+        - 第3次及之後等 60s + random(0~30)s
+        """
+        if attempt == 1:
+            return 30.0
+        elif attempt == 2:
+            return 60.0
+        else:
+            return 60.0 + random.uniform(0, 30)
+
+    def _analyze_with_retry(self, analyzer: GeminiAnalyzer, batch: list, batch_num: int) -> list | None:
+        """
+        帶重試機制的 AI 分析包裝器
+        最多重試 8 次，採用 30s → 60s → 60s+rand(30s) 退避策略
+        """
+        for attempt in range(1, self.MAX_AI_RETRIES + 1):
+            try:
+                result = analyzer.analyze(batch)
+                if result is not None:
+                    if attempt > 1:
+                        print(f"✅ [批次 {batch_num}] 第 {attempt} 次嘗試成功！")
+                    return result
+
+                # analyze 返回 None 視為可重試的軟失敗
+                if attempt < self.MAX_AI_RETRIES:
+                    wait = self._calculate_backoff(attempt)
+                    print(f"⚠️ [批次 {batch_num}] AI 返回空結果 (嘗試 {attempt}/{self.MAX_AI_RETRIES})，{wait:.1f}s 後重試...")
+                    time.sleep(wait)
+                else:
+                    print(f"❌ [批次 {batch_num}] AI 連續 {self.MAX_AI_RETRIES} 次返回空結果，放棄該批次。")
+                    return None
+
+            except Exception as e:
+                if attempt < self.MAX_AI_RETRIES:
+                    wait = self._calculate_backoff(attempt)
+                    print(f"🔥 [批次 {batch_num}] AI 調用異常: {type(e).__name__}: {e}")
+                    print(f"   ⏳ 第 {attempt}/{self.MAX_AI_RETRIES} 次失敗，{wait:.1f}s 後重試...")
+                    time.sleep(wait)
+                else:
+                    print(f"💀 [批次 {batch_num}] AI 調用連續 {self.MAX_AI_RETRIES} 次失敗，最終錯誤: {e}")
+                    return None
+
+        return None
+
     def _execute_pipeline(self, state_mgr, scraper, news_filter, analyzer, notifier):
         """執行單次完整的增量採集、初篩、Gemini 分析與飛書推送流程"""
         cutoff_ts = state_mgr.get_cutoff_timestamp()
@@ -48,7 +100,7 @@ class Orchestrator:
 
         # 1. 多源增量爬取
         raw_news = scraper.fetch_all(cutoff_ts, state_mgr)
-        
+
         # 🚨 關鍵防護：若本次因網路逾時或異常導致抓取量為 0，絕對不更新 history.json 的 Cutoff 時間戳！
         if not raw_news:
             print("📭 本次採集為空（可能遇網路逾時或暫無更新），保留原 Cutoff 留待下輪重試，不更新狀態。")
@@ -62,7 +114,7 @@ class Orchestrator:
             state_mgr.save(int(now.timestamp()))
             return
 
-        # 3. AI 批次分析 (修復：錨定總數，確保所有提煉新聞都被處理)
+        # 3. AI 批次分析 (使用帶重試機制的包裝器)
         total_count = len(filtered_news)
         print(f"🤖 共有 {total_count} 條新聞進入 Gemini 深度量化分析...")
         analyzed_results = []
@@ -72,16 +124,18 @@ class Orchestrator:
             batch = filtered_news[i:i + batch_size]
             batch_num = i // batch_size + 1
             end_idx = min(i + batch_size, total_count)
-            
+
             print(f"🧠 [批次 {batch_num}] 開始將第 {i+1} 至 {end_idx} 條新聞 (共 {len(batch)} 條) 送入 AI 分析...")
-            
-            batch_res = analyzer.analyze(batch)
+
+            # ✅ 核心變更：使用帶 8 次重試 + 動態退避的分析方法
+            batch_res = self._analyze_with_retry(analyzer, batch, batch_num)
+
             if batch_res is not None:
                 for item in batch:
                     state_mgr.add_analyzed_record(item.get("unique_id"), event="AI_PROCESSED")
                 analyzed_results.extend(batch_res)
             else:
-                print(f"⚠️ [批次 {batch_num}] AI 分析異常，該批次 {len(batch)} 條新聞將留待下輪重試。")
+                print(f"⚠️ [批次 {batch_num}] AI 分析最終失敗，該批次 {len(batch)} 條新聞將留待下輪重試。")
 
         # 4. 飛書推送 (動態讀取 MIN_SCORE)
         if analyzed_results:
@@ -97,7 +151,7 @@ class Orchestrator:
 
     def run(self):
         run_mode = os.getenv("RUN_MODE", "daemon").lower()
-        
+
         state_mgr = StateManager()
         scraper = HKStockScraper()
         news_filter = NewsFilter(state_mgr)
