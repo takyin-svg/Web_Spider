@@ -28,11 +28,21 @@ jobs:
           python-version: '3.11'
           cache: "pip"
 
+      # ✅ 新增：快取 Playwright 瀏覽器，實現「自動更新 + 秒級啟動」
+      - name: Cache Playwright Browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          # 綁定 requirements.txt，只要依賴版本變更，就會自動觸發重新下載(自動更新)
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -q -r requirements.txt
-          patchright install --with-deps chromium
+          # 修復核心：將 patchright 改為標準的 playwright，並安裝系統依賴
+          playwright install --with-deps chromium
 
       - name: Run News Monitor
         env:
