@@ -10,7 +10,6 @@ from src.filters import NewsFilter
 from src.analyzer import GeminiAnalyzer
 from src.feishu_notifier import FeishuNotifier
 
-
 class Orchestrator:
     # AI 分析最大重試次數
     MAX_AI_RETRIES = 6
@@ -32,10 +31,10 @@ class Orchestrator:
             end = now.replace(hour=10, minute=30, second=0, microsecond=0)
             return "早盤前 (橫跨週末/昨夜至今日開盤)", end
 
-        # 盤中交易時段: 10:30 - 15:30
-        elif (hour == 10 and minute >= 30) or (11 <= hour <= 14) or (hour == 15 and minute < 30):
-            end = now.replace(hour=15, minute=30, second=0, microsecond=0)
-            return "盤中 (10:30-15:30)", end
+        # 盤中交易時段: 10:30 - 16:00
+        elif (hour == 10 and minute >= 30) or (11 <= hour <= 15):
+            end = now.replace(hour=16, minute=0, second=0, microsecond=0)
+            return "盤中 (10:30-16:00)", end
 
         # 自訂/測試時段
         return "自訂/測試時段", now + timedelta(minutes=60)
