@@ -1,8 +1,8 @@
 # src/sources/zhitong_focus.py
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urljoin
-from scrapling.fetchers import DynamicSession
+from scrapling.fetchers import StealthyFetcher
 from src.config import HKT
 from src.sources.base import BaseSource
 
@@ -17,7 +17,7 @@ class ZhitongFocusSource(BaseSource):
         if not text:
             return 0, ""
 
-        # 1. 剛剛 / 刚刚
+        # 1. 剛剛 / 终于
         if any(k in text for k in ["剛", "刚"]):
             ts = int(now.timestamp())
             return ts, now.strftime('%Y-%m-%d %H:%M:%S')
@@ -127,7 +127,7 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = '';
                         if (card) {
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
+                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date'], span.time, .pubtime');
                             if (timeEl) {
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
                             }
@@ -195,7 +195,7 @@ class ZhitongFocusSource(BaseSource):
                     break
 
         try:
-            with DynamicSession(headless=True, stealth=True, timeout=45000) as sess:
+            with StealthyFetcher(headless=True, stealth=True, timeout=45000) as sess:
                 sess.fetch(
                     "https://m.zhitongcaijing.com/market.html",
                     wait_until="domcontentloaded",
