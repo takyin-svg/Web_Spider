@@ -1,5 +1,5 @@
 {
-  "last_run_timestamp": 1792395690,
+  "last_run_timestamp": 1792426313,
   "flash_seen_ids": [
     "7985554",
     "7985545",
@@ -839,7 +839,42 @@
     "8003461",
     "8003428",
     "8003733",
-    "8003820"
+    "8003820",
+    "8005281",
+    "8005260",
+    "8005225",
+    "8005168",
+    "8005140",
+    "8005077",
+    "8005066",
+    "8004988",
+    "8005014",
+    "8004980",
+    "8004973",
+    "8004948",
+    "8004940",
+    "8004902",
+    "8004879",
+    "8004848",
+    "8004811",
+    "8004751",
+    "8004738",
+    "8004695",
+    "8004689",
+    "8004683",
+    "8004660",
+    "8004651",
+    "8004613",
+    "8004584",
+    "8004554",
+    "8004550",
+    "8004540",
+    "8004533",
+    "8004529",
+    "8004501",
+    "8004122",
+    "8004029",
+    "8003878"
   ],
   "news_seen_links": [
     "https://m.zhitongcaijing.com/article/share.html?content_id=1506762",
@@ -1180,7 +1215,9 @@
     "https://m.zhitongcaijing.com/article/share.html?content_id=1508723",
     "https://m.zhitongcaijing.com/article/share.html?content_id=1508718",
     "https://m.zhitongcaijing.com/article/share.html?content_id=1508714",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1508695"
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1508695",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1508848",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1509078"
   ],
   "analyzed_records": [
     {
@@ -3192,6 +3229,96 @@
       "stock": "",
       "event": "AI_PROCESSED",
       "timestamp": "2026-10-19 15:41"
+    },
+    {
+      "key": "8005168",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8005066",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8005014",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004973",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004902",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004879",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004811",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004751",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004738",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004651",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004613",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004584",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004501",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8004029",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
+    },
+    {
+      "key": "8003878",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-10-19 23:29"
     }
   ]
 }
