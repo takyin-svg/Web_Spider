@@ -1,6 +1,6 @@
-#scrapling[fetchers]
-scrapling==0.2.99
-browserforge>=1.0.0
+#scrapling==0.2.99
+#browserforge>=1.0.0
+scrapling[fetchers]
 playwright>=1.49.0
 google-genai>=0.1.0
 requests>=2.31.0
