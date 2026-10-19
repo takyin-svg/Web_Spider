@@ -195,12 +195,12 @@ class ZhitongFocusSource(BaseSource):
                     break
 
         try:
-            with StealthyFetcher(headless=True, stealth=True, timeout=45000) as sess:
-                sess.fetch(
-                    "https://m.zhitongcaijing.com/market.html",
-                    wait_until="domcontentloaded",
-                    page_action=page_action_handler
-                )
+            fetcher = StealthyFetcher(headless=True, stealth=True, timeout=45000)
+            fetcher.fetch(
+                "https://m.zhitongcaijing.com/market.html",
+                wait_until="domcontentloaded",
+                page_action=page_action_handler
+            )
         except Exception as e:
             print(f"  ⚠️ [{self.name}] 調度異常: {e}")
 
