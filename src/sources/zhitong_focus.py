@@ -17,7 +17,7 @@ class ZhitongFocusSource(BaseSource):
         if not text:
             return 0, ""
 
-        # 1. 剛剛 / 终于
+        # 1. 剛剛 / 刚
         if any(k in text for k in ["剛", "刚"]):
             ts = int(now.timestamp())
             return ts, now.strftime('%Y-%m-%d %H:%M:%S')
@@ -69,7 +69,6 @@ class ZhitongFocusSource(BaseSource):
             year = now.year
             month = int(m_cn.group(1))
             day = int(m_cn.group(2))
-            # 💡 若僅有日期無時分，設為 22:00:00，確保當天晚間新聞能被收錄，翻到昨日新聞時才剎車
             hour = int(m_cn.group(3)) if m_cn.group(3) else 22
             minute = int(m_cn.group(4)) if m_cn.group(4) else 0
             dt = datetime(year, month, day, hour, minute, 0, tzinfo=HKT)
@@ -101,8 +100,8 @@ class ZhitongFocusSource(BaseSource):
                 except Exception:
                     pass
 
-                # 🚀 套用測試成功的 JS 向上錨定抽取邏輯
-                batch = page.evaluate("""() => {
+                # 使用 raw string r""" ... """ 避免 JS 正則表達式雙反斜線轉義問題
+                batch = page.evaluate(r"""() => {
                     const results = [];
                     const seenHrefs = new Set();
                     const aTags = Array.from(document.querySelectorAll('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]'));
@@ -127,7 +126,7 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = '';
                         if (card) {
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date'], span.time, .pubtime');
+                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
                             if (timeEl) {
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
                             }
@@ -135,14 +134,14 @@ class ZhitongFocusSource(BaseSource):
 
                         const cardText = card ? (card.innerText || card.textContent || '') : title;
                         if (!rawTime) {
-                            const match = cardText.match(/(?:\\d{4}[-/])?\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\\s*\\d{1,2}:\\d{1,2}|\\b\\d{1,2}:\\d{1,2}(?::\\d{1,2})?\\b|\\d{1,2}月\\d{1,2}日(?:\\s*\\d{1,2}:\\d{1,2})?|\\d+\\s*(?:分鐘|分钟|小時|小时|分|h)\\s*前|剛剛|刚刚/);
+                            const match = cardText.match(/(?:\d{4}[-/])?\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{1,2}(?::\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\s*\d{1,2}:\d{1,2}|\b\d{1,2}:\d{1,2}(?::\d{1,2})?|\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{1,2})?|\d+\s*(?:分鐘|分钟|小時|小时|分|h)\s*前|剛剛|刚刚/);
                             if (match) {
                                 rawTime = match[0];
                             }
                         }
 
                         results.push({
-                            title: title.replace(/\\s+/g, ' '),
+                            title: title.replace(/\s+/g, ' '),
                             href: href,
                             raw_time: rawTime
                         });
@@ -172,7 +171,7 @@ class ZhitongFocusSource(BaseSource):
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
-                    # 3. 觸達 16:00 水位線 (翻到昨日新聞) -> 立即終止
+                    # 3. 觸達時間水位線 -> 立即終止
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                         print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
                         should_stop = True
