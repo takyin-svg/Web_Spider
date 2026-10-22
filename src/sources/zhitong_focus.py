@@ -90,7 +90,7 @@ class ZhitongFocusSource(BaseSource):
             for p in range(1, max_pages + 1):
                 target_url = self.mobile_url_pattern.format(p)
                 try:
-                    page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
+                    page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
                 except Exception as e:
                     print(f"  ⚠️ [{self.name}] 第 {p} 頁開啟超時: {e}")
                     break
