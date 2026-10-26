@@ -62,7 +62,7 @@ class GeminiAnalyzer:
         print(f"🧠 開始將批次新聞送入 Gemini ({AI_MODEL}) 進行深度分析與硬性排除過濾...")
         analyzed_results = []
         
-        max_retries = 5
+        max_retries = 3
         wait_times = [30, 60, 90]
         
         for attempt in range(1, max_retries + 1):
