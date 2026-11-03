@@ -1,35 +1,6 @@
 {
-  "last_run_timestamp": 1793635301,
+  "last_run_timestamp": 1793672669,
   "flash_seen_ids": [
-    "8037072",
-    "8037271",
-    "8037122",
-    "8037272",
-    "8037119",
-    "8037019",
-    "8037006",
-    "8036996",
-    "8036977",
-    "8036983",
-    "8036956",
-    "8036927",
-    "8036920",
-    "8036923",
-    "8036919",
-    "8036910",
-    "8036909",
-    "8036874",
-    "8036872",
-    "8036871",
-    "8036855",
-    "8036856",
-    "8036912",
-    "8036913",
-    "8036850",
-    "8036914",
-    "8036813",
-    "8036817",
-    "8036802",
     "8036915",
     "8036862",
     "8036801",
@@ -1000,29 +971,38 @@
     "8061948",
     "8061956",
     "8061928",
-    "8061919"
+    "8061919",
+    "8062967",
+    "8062971",
+    "8062984",
+    "8063004",
+    "8062992",
+    "8063008",
+    "8063012",
+    "8063174",
+    "8063179",
+    "8063227",
+    "8063261",
+    "8063260",
+    "8063259",
+    "8063258",
+    "8063362",
+    "8063361",
+    "8063401",
+    "8063420",
+    "8063452",
+    "8063447",
+    "8063450",
+    "8063482",
+    "8063496",
+    "8063532",
+    "8063560",
+    "8063567",
+    "8063557",
+    "8063606",
+    "8063607"
   ],
   "news_seen_links": [
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507465",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507466",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507459",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507457",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507456",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507455",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507452",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507450",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507448",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507447",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507445",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507444",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507443",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507442",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507441",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507439",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507438",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507434",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507429",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1507428",
     "https://m.zhitongcaijing.com/article/share.html?content_id=1507423",
     "https://m.zhitongcaijing.com/article/share.html?content_id=1507416",
     "https://m.zhitongcaijing.com/article/share.html?content_id=1507408",
@@ -2002,165 +1982,29 @@
     "https://m.zhitongcaijing.com/article/share.html?content_id=1517103",
     "https://m.zhitongcaijing.com/article/share.html?content_id=1517090",
     "https://m.zhitongcaijing.com/article/share.html?content_id=1517075",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1517480"
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517480",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517493",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517490",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517488",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517510",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517520",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517523",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517530",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517519",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517553",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517554",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517563",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517560",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517558",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517565",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517567",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517568",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517570",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517572",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517569",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1517575"
   ],
   "analyzed_records": [
-    {
-      "key": "8016929",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 12:06"
-    },
-    {
-      "key": "8016964",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 12:10"
-    },
-    {
-      "key": "8016979",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 12:16"
-    },
-    {
-      "key": "8017004",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 12:27"
-    },
-    {
-      "key": "8017006",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 12:31"
-    },
-    {
-      "key": "8017178",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 13:49"
-    },
-    {
-      "key": "8017184",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 13:49"
-    },
-    {
-      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1510618",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 13:55"
-    },
-    {
-      "key": "8017212",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 13:55"
-    },
-    {
-      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1510621",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:02"
-    },
-    {
-      "key": "8017219",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:02"
-    },
-    {
-      "key": "8017311",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:23"
-    },
-    {
-      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1510648",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:39"
-    },
-    {
-      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1510640",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:39"
-    },
-    {
-      "key": "8017394",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:39"
-    },
-    {
-      "key": "8017427",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:46"
-    },
-    {
-      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1510657",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:57"
-    },
-    {
-      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1510654",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:57"
-    },
-    {
-      "key": "8017471",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:57"
-    },
-    {
-      "key": "8017466",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 14:57"
-    },
-    {
-      "key": "8017575",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 15:23"
-    },
-    {
-      "key": "8017661",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 15:34"
-    },
-    {
-      "key": "8017754",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 15:47"
-    },
-    {
-      "key": "8017760",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 15:55"
-    },
-    {
-      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1511030",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 23:30"
-    },
-    {
-      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1511029",
-      "stock": "",
-      "event": "AI_PROCESSED",
-      "timestamp": "2026-10-22 23:30"
-    },
     {
       "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1511026",
       "stock": "",
@@ -8004,6 +7848,162 @@
       "stock": "",
       "event": "AI_PROCESSED",
       "timestamp": "2026-11-02 23:51"
+    },
+    {
+      "key": "8062967",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 06:37"
+    },
+    {
+      "key": "8062971",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 06:42"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517490",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 06:54"
+    },
+    {
+      "key": "8062992",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 06:54"
+    },
+    {
+      "key": "8063008",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 06:58"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517510",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 08:00"
+    },
+    {
+      "key": "8063179",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 08:25"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517523",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 08:36"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517530",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 08:42"
+    },
+    {
+      "key": "8063261",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 08:55"
+    },
+    {
+      "key": "8063260",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 08:55"
+    },
+    {
+      "key": "8063259",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 08:55"
+    },
+    {
+      "key": "8063258",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 08:55"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517519",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 09:06"
+    },
+    {
+      "key": "8063420",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 09:40"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517563",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 09:47"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517558",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 09:47"
+    },
+    {
+      "key": "8063452",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 09:47"
+    },
+    {
+      "key": "8063450",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 09:47"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517570",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 10:09"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517572",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 10:09"
+    },
+    {
+      "key": "8063560",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 10:09"
+    },
+    {
+      "key": "8063567",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 10:09"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1517575",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 10:24"
+    },
+    {
+      "key": "8063606",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 10:24"
+    },
+    {
+      "key": "8063607",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-03 10:24"
     }
   ]
 }
