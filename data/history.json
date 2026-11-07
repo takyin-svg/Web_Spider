@@ -1,5 +1,5 @@
 {
-  "last_run_timestamp": 1793997911,
+  "last_run_timestamp": 1794078991,
   "flash_seen_ids": [
     "8076941",
     "8076867",
@@ -502,7 +502,17 @@
     "https://m.zhitongcaijing.com/article/share.html?content_id=1519409",
     "https://m.zhitongcaijing.com/article/share.html?content_id=1519408",
     "https://m.zhitongcaijing.com/article/share.html?content_id=1519426",
-    "https://m.zhitongcaijing.com/article/share.html?content_id=1519427"
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1519427",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1520078",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1520055",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1520053",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1520056",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1519924",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1519900",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1519916",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1519908",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1519883",
+    "https://m.zhitongcaijing.com/article/share.html?content_id=1519881"
   ],
   "analyzed_records": [
     {
@@ -1128,6 +1138,30 @@
       "stock": "",
       "event": "AI_PROCESSED",
       "timestamp": "2026-11-07 04:47"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1520055",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-08 03:16"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1519916",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-08 03:16"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1519883",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-08 03:16"
+    },
+    {
+      "key": "https://m.zhitongcaijing.com/article/share.html?content_id=1519881",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-08 03:16"
     }
   ]
 }
