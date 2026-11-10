@@ -15,3 +15,6 @@ opencc-python-reimplemented==0.1.7
 
 # Google Gemini API
 google-genai==1.20.0
+
+# StealthyFetcher 指紋依賴，補回 browserforge
+browserforge>=1.0.0
