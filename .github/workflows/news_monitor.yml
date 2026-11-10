@@ -34,22 +34,22 @@ jobs:
           pip install -q -r requirements.txt
           # 修復：補裝 StealthyFetcher 指紋依賴 browserforge（不鎖版本，避免與 scrapling 耦合衝突）
           pip install -q browserforge
+          # 修復：scrapling 的 StealthyFetcher 底層用 Patchright，必須用 patchright 裝瀏覽器
+          pip install -q patchright
+          patchright install --with-deps chromium
 
-      - name: Resolve Playwright version
+      - name: Resolve Patchright version
         id: pw
-        run: echo "version=$(python -c 'import importlib.metadata as m; print(m.version("playwright"))')" >> $GITHUB_OUTPUT
+        run: echo "version=$(python -c 'import importlib.metadata as m; print(m.version("patchright"))')" >> $GITHUB_OUTPUT
 
       - name: Cache Playwright Browsers
         uses: actions/cache@v4
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-${{ steps.pw.outputs.version }}
+          key: patchright-${{ runner.os }}-chromium-${{ steps.pw.outputs.version }}
           restore-keys: |
-            playwright-${{ runner.os }}-chromium-
-
-      - name: Install Playwright Browsers
-        run: playwright install --with-deps chromium
+            patchright-${{ runner.os }}-chromium-
 
       - name: Run News Monitor
         env:
