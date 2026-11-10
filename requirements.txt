@@ -1,8 +1,17 @@
-#scrapling==0.2.99
-#browserforge>=1.0.0
-scrapling[fetchers]
-playwright>=1.49.0
-google-genai>=0.1.0
-requests>=2.31.0
-pytz>=2024.1
-opencc-python-reimplemented>=0.1.7
+# 核心爬蟲框架（含 fetchers 額外依賴）
+scrapling[fetchers]==0.2.99
+
+# 瀏覽器自動化驅動
+playwright==1.49.1
+
+# HTTP 請求庫
+requests==2.32.3
+
+# 時區處理
+pytz==2024.2
+
+# 簡繁轉換
+opencc-python-reimplemented==0.1.7
+
+# Google Gemini API
+google-genai==1.20.0
