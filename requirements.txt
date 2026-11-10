@@ -1,8 +1,8 @@
 # 核心爬蟲框架（含 fetchers 額外依賴）
 scrapling[fetchers]==0.2.99
 
-# 瀏覽器自動化驅動
-playwright==1.49.1
+# 瀏覽器自動化驅動（StealthyFetcher 底層用 Patchright，不再需要 playwright）
+patchright>=1.49.0
 
 # HTTP 請求庫
 requests==2.32.3
