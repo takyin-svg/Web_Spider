@@ -129,7 +129,7 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = '';
                         if (card) {
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date'], span.time, .pubtime');
+                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
                             if (timeEl) {
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
                             }
@@ -197,8 +197,8 @@ class ZhitongFocusSource(BaseSource):
                     break
 
         try:
+            # 僅保留基本必要的隱身與逾時參數，避免底層 Camoufox 引擎不支援 allow_webgl 報錯
             fetcher = StealthyFetcher(headless=True, stealth=True, timeout=45000)
-            # 移除 fetch 中不支援的 wait_until 參數
             fetcher.fetch(
                 "https://m.zhitongcaijing.com/market.html",
                 page_action=page_action_handler
