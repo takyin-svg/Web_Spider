@@ -1,5 +1,5 @@
-# 核心爬蟲框架（含 fetchers 額外依賴）
-scrapling[fetchers]==0.2.99
+# 核心爬蟲框架（鎖定穩定版本，避免新版 allow_webgl 與參數衝突）
+scrapling[fetchers]==0.2.4
 
 # 瀏覽器自動化驅動（StealthyFetcher 底層用 Patchright，不再需要 playwright）
 patchright>=1.49.0
