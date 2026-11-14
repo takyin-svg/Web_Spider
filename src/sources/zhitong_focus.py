@@ -85,12 +85,15 @@ class ZhitongFocusSource(BaseSource):
 
         def page_action_handler(page):
             nonlocal should_stop
-            page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
+            try:
+                page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
+            except Exception:
+                pass
 
             for p in range(1, max_pages + 1):
                 target_url = self.mobile_url_pattern.format(p)
                 try:
-                    page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
+                    page.goto(target_url, timeout=45000)
                 except Exception as e:
                     print(f"  ⚠️ [{self.name}] 第 {p} 頁開啟超時: {e}")
                     break
@@ -126,7 +129,7 @@ class ZhitongFocusSource(BaseSource):
 
                         let rawTime = '';
                         if (card) {
-                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
+                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date'], span.time, .pubtime');
                             if (timeEl) {
                                 rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
                             }
@@ -195,9 +198,9 @@ class ZhitongFocusSource(BaseSource):
 
         try:
             fetcher = StealthyFetcher(headless=True, stealth=True, timeout=45000)
+            # 移除 fetch 中不支援的 wait_until 參數
             fetcher.fetch(
                 "https://m.zhitongcaijing.com/market.html",
-                wait_until="domcontentloaded",
                 page_action=page_action_handler
             )
         except Exception as e:
