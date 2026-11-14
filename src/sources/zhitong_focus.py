@@ -1,4 +1,4 @@
-# srczhitong_focus.py
+# src/sources/zhitong_focus.py
 import re
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
@@ -9,7 +9,7 @@ from src.sources.base import BaseSource
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
-        self.mobile_url_pattern = "https:market.html?page={}"
+        self.mobile_url_pattern = "https://m.zhitongcaijing.com/market.html?page={}"
 
     def _parse_time_str(self, text: str) -> tuple[int, str]:
         now = datetime.now(HKT)
@@ -43,7 +43,7 @@ class ZhitongFocusSource(BaseSource):
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
         # 4. YYYY-MM-DD HH:MM 或 MM-DD HH:MM
-        m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
+        m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
             year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
             month = int(m_date_time.group(2))
@@ -196,7 +196,8 @@ class ZhitongFocusSource(BaseSource):
         try:
             fetcher = StealthyFetcher(headless=True, stealth=True, timeout=45000)
             fetcher.fetch(
-                "https:market.html",
+                "https://m.zhitongcaijing.com/market.html",
+                wait_until="domcontentloaded",
                 page_action=page_action_handler
             )
         except Exception as e:
