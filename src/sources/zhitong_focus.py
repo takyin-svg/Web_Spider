@@ -1,8 +1,11 @@
+如果擺脫scrapling可以取復網站資料？
+其他一律不改
+
 # src/sources/zhitong_focus.py
 import re
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
-from scrapling.fetchers import Fetcher
+from scrapling.fetchers import StealthyFetcher
 from src.config import HKT
 from src.sources.base import BaseSource
 
@@ -17,10 +20,12 @@ class ZhitongFocusSource(BaseSource):
         if not text:
             return 0, ""
 
+        # 1. 剛剛 / 刚
         if any(k in text for k in ["剛", "刚"]):
             ts = int(now.timestamp())
             return ts, now.strftime('%Y-%m-%d %H:%M:%S')
 
+        # 2. 相對時間：分鐘前 / 小時前
         m_min = re.search(r'(\d+)\s*(?:分鐘|分钟|分)\s*前', text)
         if m_min:
             ts = int(now.timestamp()) - int(m_min.group(1)) * 60
@@ -31,6 +36,7 @@ class ZhitongFocusSource(BaseSource):
             ts = int(now.timestamp()) - int(m_hr.group(1)) * 3600
             return ts, datetime.fromtimestamp(ts, HKT).strftime('%Y-%m-%d %H:%M:%S')
 
+        # 3. 昨天 / 前天
         m_yest = re.search(r'(?:昨[天日]|前[天日])\s*(\d{1,2}):(\d{1,2})', text)
         if m_yest:
             days_ago = 2 if "前" in m_yest.group(0) else 1
@@ -39,6 +45,7 @@ class ZhitongFocusSource(BaseSource):
             dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
+        # 4. YYYY-MM-DD HH:MM 或 MM-DD HH:MM
         m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
             year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
@@ -50,6 +57,7 @@ class ZhitongFocusSource(BaseSource):
             dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
+        # 5. 純當日時間 18:30 或 今天 18:30
         m_today = re.search(r'(?:(?:今[天日])\s*)?(\b\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\b', text)
         if m_today and not re.search(r'\d{1,2}[-/月]\d{1,2}', text):
             h, m = int(m_today.group(1)), int(m_today.group(2))
@@ -58,6 +66,7 @@ class ZhitongFocusSource(BaseSource):
                 dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
                 return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
+        # 6. 中文日期 10月9日 18:30 或 10月9日
         m_cn = re.search(r'(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', text)
         if m_cn:
             year = now.year
@@ -70,82 +79,132 @@ class ZhitongFocusSource(BaseSource):
 
         return 0, ""
 
-    def fetch(self, cutoff_timestamp: int, state_manager, max_pages: int = 5) -> list[dict]:
+    def fetch(self, cutoff_timestamp: int, state_manager, max_pages: int = 10) -> list[dict]:
         results = []
         cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S')
-        print(f"  🔍 [{self.name}] 啟動標準穩定解析，目標時間下限: {cutoff_dt_str}")
+        print(f"  🔍 [{self.name}] 啟動手機版深度識別，目標時間下限: {cutoff_dt_str}")
 
         should_stop = False
-        headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
-        }
 
-        for p in range(1, max_pages + 1):
-            target_url = self.mobile_url_pattern.format(p)
-            try:
-                # 繞過瀏覽器核心，直接透過輕量級 Fetcher 帶偽裝標頭請求
-                page = Fetcher().get(target_url, headers=headers, timeout=30000)
-            except Exception as e:
-                print(f"  ⚠️ [{self.name}] 第 {p} 頁請求異常: {e}")
-                break
+        def page_action_handler(page):
+            nonlocal should_stop
+            page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
 
-            a_tags = page.css('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]')
-            if not a_tags:
-                break
-
-            page_added = 0
-            for a in a_tags:
-                title = str(a.text).strip() if a.text else ""
-                href = a.attrib.get('href', '')
-                if len(title) < 8 or not href:
-                    continue
-
-                card = a.css_first('li, div.item, div.list-item, section')
-                card_text = str(card.text).strip() if (card and card.text) else title
-                
-                raw_time = ''
-                if card:
-                    time_el = card.css_first('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime')
-                    if time_el and time_el.text:
-                        raw_time = str(time_el.text).strip()
-
-                if not raw_time:
-                    match = re.search(r'(?:\d{4}[-/])?\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{1,2}(?::\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\s*\d{1,2}:\d{1,2}|\b\d{1,2}:\d{1,2}(?::\d{1,2})?|\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{1,2})?|\d+\s*(?:分鐘|分钟|小時|小时|分|h)\s*前|剛剛|刚刚', card_text)
-                    if match:
-                        raw_time = match.group(0)
-
-                full_link = urljoin(target_url, href)
-
-                if any(w in title for w in ["登入", "登錄", "下載", "首頁", "版權所有"]):
-                    continue
-
-                if state_manager.is_news_scanned(full_link):
-                    print(f"  🛑 [{self.name}] 碰頭歷史記錄 [{title[:25]}...]，結束翻頁。")
-                    should_stop = True
+            for p in range(1, max_pages + 1):
+                target_url = self.mobile_url_pattern.format(p)
+                try:
+                    page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
+                except Exception as e:
+                    print(f"  ⚠️ [{self.name}] 第 {p} 頁開啟超時: {e}")
                     break
 
-                pub_ts, pub_time_str = self._parse_time_str(raw_time)
+                try:
+                    page.wait_for_selector('a[href*="detail"], a[href*="content_id"]', timeout=8000)
+                except Exception:
+                    pass
 
-                if pub_ts > 0 and pub_ts <= cutoff_timestamp:
-                    print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
-                    should_stop = True
+                # 使用 raw string r""" ... """ 避免 JS 正則表達式雙反斜線轉義問題
+                batch = page.evaluate(r"""() => {
+                    const results = [];
+                    const seenHrefs = new Set();
+                    const aTags = Array.from(document.querySelectorAll('a[href*="detail"], a[href*="content_id"], a[href*="/content/"]'));
+                    
+                    for (const a of aTags) {
+                        const title = (a.innerText || a.textContent || '').trim();
+                        const href = a.getAttribute('href') || '';
+                        if (title.length < 8 || !href || seenHrefs.has(href)) continue;
+                        seenHrefs.add(href);
+
+                        let card = a.closest('li') || a.closest('div.item') || a.closest('div.list-item') || a.closest('section');
+                        if (!card) {
+                            let p = a.parentElement;
+                            while (p && p !== document.body) {
+                                if (p.innerText && p.innerText.length > title.length + 3) {
+                                    card = p;
+                                    break;
+                                }
+                                p = p.parentElement;
+                            }
+                        }
+
+                        let rawTime = '';
+                        if (card) {
+                            const timeEl = card.querySelector('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime');
+                            if (timeEl) {
+                                rawTime = (timeEl.innerText || timeEl.textContent || '').trim();
+                            }
+                        }
+
+                        const cardText = card ? (card.innerText || card.textContent || '') : title;
+                        if (!rawTime) {
+                            const match = cardText.match(/(?:\d{4}[-/])?\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{1,2}(?::\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\s*\d{1,2}:\d{1,2}|\b\d{1,2}:\d{1,2}(?::\d{1,2})?|\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{1,2})?|\d+\s*(?:分鐘|分钟|小時|小时|分|h)\s*前|剛剛|刚刚/);
+                            if (match) {
+                                rawTime = match[0];
+                            }
+                        }
+
+                        results.push({
+                            title: title.replace(/\s+/g, ' '),
+                            href: href,
+                            raw_time: rawTime
+                        });
+                    }
+                    return results;
+                }""")
+
+                if not batch:
                     break
 
-                if not pub_time_str:
-                    pub_time_str = datetime.now(HKT).strftime('%Y-%m-%d %H:%M:%S')
+                page_added = 0
+                for item in batch:
+                    title = item.get("title", "")
+                    if any(w in title for w in ["登入", "登錄", "下載", "首頁", "版權所有"]):
+                        continue
 
-                results.append({
-                    "unique_id": full_link,
-                    "title": title,
-                    "source": self.name,
-                    "link": full_link,
-                    "time": pub_time_str
-                })
-                state_manager.add_scanned(full_link)
-                page_added += 1
+                    raw_href = item.get("href", "")
+                    full_link = urljoin(target_url, raw_href)
 
-            if should_stop or page_added == 0:
-                break
+                    # 1. 碰頭已掃描歷史記錄 -> 立即終止
+                    if state_manager.is_news_scanned(full_link):
+                        print(f"  🛑 [{self.name}] 碰頭歷史記錄 [{title[:25]}...]，結束翻頁。")
+                        should_stop = True
+                        break
+
+                    # 2. 解析時間
+                    raw_time = item.get("raw_time", "")
+                    pub_ts, pub_time_str = self._parse_time_str(raw_time)
+
+                    # 3. 觸達時間水位線 -> 立即終止
+                    if pub_ts > 0 and pub_ts <= cutoff_timestamp:
+                        print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
+                        should_stop = True
+                        break
+
+                    if not pub_time_str:
+                        pub_time_str = datetime.now(HKT).strftime('%Y-%m-%d %H:%M:%S')
+
+                    results.append({
+                        "unique_id": full_link,
+                        "title": title,
+                        "source": self.name,
+                        "link": full_link,
+                        "time": pub_time_str
+                    })
+                    state_manager.add_scanned(full_link)
+                    page_added += 1
+
+                if should_stop or page_added == 0:
+                    break
+
+        try:
+            fetcher = StealthyFetcher(headless=True, stealth=True, timeout=45000)
+            fetcher.fetch(
+                "https://m.zhitongcaijing.com/market.html",
+                wait_until="domcontentloaded",
+                page_action=page_action_handler
+            )
+        except Exception as e:
+            print(f"  ⚠️ [{self.name}] 調度異常: {e}")
 
         print(f"  └─ [{self.name}] 本次增量共收錄 {len(results)} 條新聞 (時間全部精準對齊)")
         return results
