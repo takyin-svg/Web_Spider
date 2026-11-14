@@ -17,12 +17,10 @@ class ZhitongFocusSource(BaseSource):
         if not text:
             return 0, ""
 
-        # 1. 剛剛 / 刚
         if any(k in text for k in ["剛", "刚"]):
             ts = int(now.timestamp())
             return ts, now.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 2. 相對時間：分鐘前 / 小時前
         m_min = re.search(r'(\d+)\s*(?:分鐘|分钟|分)\s*前', text)
         if m_min:
             ts = int(now.timestamp()) - int(m_min.group(1)) * 60
@@ -33,7 +31,6 @@ class ZhitongFocusSource(BaseSource):
             ts = int(now.timestamp()) - int(m_hr.group(1)) * 3600
             return ts, datetime.fromtimestamp(ts, HKT).strftime('%Y-%m-%d %H:%M:%S')
 
-        # 3. 昨天 / 前天
         m_yest = re.search(r'(?:昨[天日]|前[天日])\s*(\d{1,2}):(\d{1,2})', text)
         if m_yest:
             days_ago = 2 if "前" in m_yest.group(0) else 1
@@ -42,7 +39,6 @@ class ZhitongFocusSource(BaseSource):
             dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 4. YYYY-MM-DD HH:MM 或 MM-DD HH:MM
         m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
             year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
@@ -54,7 +50,6 @@ class ZhitongFocusSource(BaseSource):
             dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 5. 純當日時間 18:30 或 今天 18:30
         m_today = re.search(r'(?:(?:今[天日])\s*)?(\b\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\b', text)
         if m_today and not re.search(r'\d{1,2}[-/月]\d{1,2}', text):
             h, m = int(m_today.group(1)), int(m_today.group(2))
@@ -63,7 +58,6 @@ class ZhitongFocusSource(BaseSource):
                 dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
                 return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 6. 中文日期 10月9日 18:30 或 10月9日
         m_cn = re.search(r'(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', text)
         if m_cn:
             year = now.year
@@ -97,19 +91,20 @@ class ZhitongFocusSource(BaseSource):
             should_stop = False
 
             for a in a_tags:
-                title = a.text(strip=True)
+                # 修正：使用 .text 屬性取得字串
+                title = str(a.text).strip() if a.text else ""
                 href = a.attrib.get('href', '')
                 if len(title) < 8 or not href:
                     continue
 
                 card = a.css_first('li, div.item, div.list-item, section')
-                card_text = card.text(strip=True) if card else title
+                card_text = str(card.text).strip() if (card and card.text) else title
                 
                 raw_time = ''
                 if card:
                     time_el = card.css_first('.time, .date, [class*="time"], [class*="date"], span.time, .pubtime')
-                    if time_el:
-                        raw_time = time_el.text(strip=True)
+                    if time_el and time_el.text:
+                        raw_time = str(time_el.text).strip()
 
                 if not raw_time:
                     match = re.search(r'(?:\d{4}[-/])?\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{1,2}(?::\d{1,2})?|(?:今[天日]|昨[天日]|前[天日])\s*\d{1,2}:\d{1,2}|\b\d{1,2}:\d{1,2}(?::\d{1,2})?|\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{1,2})?|\d+\s*(?:分鐘|分钟|小時|小时|分|h)\s*前|剛剛|刚刚', card_text)
