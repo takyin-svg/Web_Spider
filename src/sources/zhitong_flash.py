@@ -1,4 +1,3 @@
-
 # src/sources/zhitong_flash.py
 # -*- coding: utf-8 -*-
 """
@@ -43,11 +42,11 @@ class ZhitongFlashSource(BaseSource):
 
     # 候选列表地址，按顺序探测，第一个能抓到卡片的即固定下来
     CANDIDATE_URLS = [
-        "{host}/content/immediately.html",
+        "{host}/immediately.html?type=ganggu",   # 本轮日志实测命中(html)且卡片最多，置顶
         "{host}/immediately.html",
-        "{host}/content/immediately.html?page={page}",
-        "{host}/7x24.html?page={page}",
         "{host}/?index=yaowen&page={page}",
+        "{host}/content/immediately.html",        # 曾稳定 500，仅作末尾兜底
+        "{host}/7x24.html?page={page}",
     ]
 
     HEADERS = {
@@ -75,12 +74,23 @@ class ZhitongFlashSource(BaseSource):
         s = _html.unescape(s)
         return re.sub(r"\s+", " ", s).strip()
 
+    @staticmethod
+    def _clean_text(s: str) -> str:
+        """剥离 split/strip 后残留的 HTML 属性碎片、孤立尖括号与多余空白。
+        例：'id="immediately_id_8116899"> ' -> ''；'> 【港股...' -> '【港股...'"""
+        if not s:
+            return ""
+        s = re.sub(r'\b[\w-]+="[^"]*"', " ", s)   # 残留的 HTML 属性（id= / class= ...）
+        s = re.sub(r"[<>]", " ", s)                 # 孤立的 < >
+        return re.sub(r"\s+", " ", s).strip()
+
     def _split_title_and_content(self, raw_text: str):
         text = (raw_text or "").replace("编辑解读", "").replace("添加解读", "") \
                                .replace("查看解读", "").strip()
+        text = self._clean_text(text)
         m = re.match(r"^(【.*?】)(.*)", text, re.DOTALL)
         if m:
-            return m.group(1).strip(), m.group(2).strip()
+            return m.group(1).strip(), self._clean_text(m.group(2))
         return text[:45], text
 
     # ------------------------------------------------------ 时间解析（加固版）
@@ -240,19 +250,28 @@ class ZhitongFlashSource(BaseSource):
 
     # ----------------------------------------------- 解析：HTML 静态形式
     def _parse_html_items(self, page_html: str) -> list:
+        """基于 finditer 精准切卡：容器类名必须是完整 class token（后跟空格或引号），
+        避免把 allday-item-time / allday-item-content 等子类误切成卡片；
+        id 从容器开标签本身提取，正文用 content 子节点优先、整块 clean 兜底。"""
         out = []
         container = (r"allday-item|immediately-item|immediately_list|flash-item"
                      r"|realtime-item|time-list-item|info-list-item")
-        blocks = re.split(
-            r'<div[^>]+class="[^"]*(?:' + container + r')[^"]*"', page_html)
-        for blk in blocks[1:]:
-            content = ""
+        opentag = re.compile(
+            r'<[^>]*class="[^"]*(?:' + container + r')(?=[ "])[^>]*>')
+        ms = list(opentag.finditer(page_html))
+        for i, m in enumerate(ms):
+            end = ms[i + 1].start() if i + 1 < len(ms) else len(page_html)
+            blk = page_html[m.end():end]
+
+            rid = ""
+            idm = re.search(r'(?:id|data-id|data-news-id)="([^"]+)"', m.group(0))
+            if idm:
+                rid = idm.group(1)
+
             cm = re.search(r'class="[^"]*(?:content|text|desc|brief)[^"]*"[^>]*>'
                            r'(.{10,}?)</div>', blk, re.DOTALL)
-            if cm:
-                content = self._strip_tags(cm.group(1))
-            if not content:
-                content = self._strip_tags(blk)
+            content = self._clean_text(
+                self._strip_tags(cm.group(1)) if cm else self._strip_tags(blk))
             for junk in ("编辑解读", "添加解读", "查看解读", "查看详情"):
                 content = content.replace(junk, " ")
             content = re.sub(r"\s+", " ", content).strip()
@@ -267,11 +286,6 @@ class ZhitongFlashSource(BaseSource):
                     r"|\d{1,2}:\d{2}(?::\d{2})?"
                     r"|\d+\s*(?:分鐘|分钟|小時|小时|分|h)\s*前|刚刚|剛剛)", blk)
                 raw_time = tm.group(1) if tm else ""
-
-            rid = ""
-            rm = re.search(r'(?:id|data-id|data-news-id)="([^"]+)"', blk)
-            if rm:
-                rid = rm.group(1)
 
             if len(content) >= 10:
                 out.append({"raw_id": rid, "content": content, "raw_time": raw_time})
