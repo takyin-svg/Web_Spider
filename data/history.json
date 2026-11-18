@@ -1,5 +1,5 @@
 {
-  "last_run_timestamp": 1794973370,
+  "last_run_timestamp": 1794974311,
   "flash_seen_ids": [
     "8076941",
     "8076867",
@@ -605,7 +605,48 @@
     "8086769",
     "8086789",
     "8086851",
-    "8086811"
+    "8086811",
+    "8116899",
+    "8116901",
+    "8116859",
+    "8116857",
+    "8116876",
+    "8116790",
+    "8116814",
+    "8116785",
+    "8116778",
+    "8116770",
+    "8116805",
+    "8116725",
+    "8116722",
+    "8116745",
+    "8116698",
+    "8116665",
+    "8116670",
+    "8116669",
+    "8116657",
+    "8116632",
+    "8116902",
+    "8116900",
+    "8116898",
+    "8116897",
+    "8116895",
+    "8116889",
+    "377175029954",
+    "8116890",
+    "8116891",
+    "8116892",
+    "8116893",
+    "8116896",
+    "8116879",
+    "8116878",
+    "8116874",
+    "8116875",
+    "8116871",
+    "8116872",
+    "8116873",
+    "8116864",
+    "8116865"
   ],
   "news_seen_links": [
     "https://m.zhitongcaijing.com/article/share.html?content_id=1519333",
@@ -821,7 +862,56 @@
     "https://www.zhitongcaijing.com/content/detail/1524780.html",
     "https://www.zhitongcaijing.com/content/detail/1524783.html",
     "https://www.zhitongcaijing.com/content/detail/1524777.html",
-    "https://www.zhitongcaijing.com/content/detail/1524775.html"
+    "https://www.zhitongcaijing.com/content/detail/1524775.html",
+    "https://www.zhitongcaijing.com/content/detail/1524854.html",
+    "c5c5b7b5a810",
+    "fd7cf9919334",
+    "abdd89d8eb6c",
+    "30f0803fe0be",
+    "0686ce509227",
+    "8f078361f49d",
+    "350466055f1a",
+    "715bb0e30ccc",
+    "f388d7aa7b00",
+    "d0ad68de6351",
+    "a31bb3c4ca38",
+    "098db9930b8d",
+    "8cb8509d5173",
+    "77054f28a81c",
+    "c0f7511899de",
+    "714bca95503f",
+    "61ee6a02f32d",
+    "824b38099db0",
+    "c00b5ea669dc",
+    "ae883e9738f9",
+    "1560229890a6",
+    "ea68df462be2",
+    "40282a5448df",
+    "${data.immediately_id}",
+    "aee9a1153ab3",
+    "555ed7105244",
+    "66623cc8a578",
+    "a7b9b4182f79",
+    "06085e874a95",
+    "7aedd9602615",
+    "99392a858ce2",
+    "84c7d407c0d9",
+    "9b02bcd4e127",
+    "f39e13c6a668",
+    "5aab29084cc4",
+    "296683f10809",
+    "d395006c9231",
+    "afe732ac5fd4",
+    "5595b5b153d1",
+    "933c9b492574",
+    "546a7daee8e7",
+    "e8ebbdf2b5c7",
+    "efa0685baee2",
+    "74cba404ad71",
+    "e0945b826a08",
+    "b18c1e9b74d6",
+    "d87374d6efa2",
+    "06228d6dfdd1"
   ],
   "analyzed_records": [
     {
@@ -2167,6 +2257,90 @@
       "stock": "",
       "event": "AI_PROCESSED",
       "timestamp": "2026-11-18 11:43"
+    },
+    {
+      "key": "fd7cf9919334",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "abdd89d8eb6c",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "30f0803fe0be",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "f388d7aa7b00",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "d0ad68de6351",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "a31bb3c4ca38",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "098db9930b8d",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "c0f7511899de",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "714bca95503f",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "61ee6a02f32d",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "c00b5ea669dc",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "ae883e9738f9",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "84c7d407c0d9",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
+    },
+    {
+      "key": "06228d6dfdd1",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 11:58"
     }
   ]
 }
