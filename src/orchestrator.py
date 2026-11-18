@@ -17,7 +17,7 @@ class Orchestrator:
     # 主模型連續失敗後降級的備援模型
     # gemini-2.5-flash 已於 2026-11-02 棄用，12/1 起舊名請求會自動改道至
     # gemini-3.5-flash-lite 並按新模型計費——屆時請把此行改成真正的備援（如 gemini-3.5-flash）
-    FALLBACK_MODEL = "gemini-2.5-flash"
+    FALLBACK_MODEL = "gemini-3.8-flash"
 
     # 🔧 本次修復新增：「斷點重試佇列」——凡是 AI 分析未成功（軟失敗或硬停）的新聞，
     #   一律暫存到此檔，下一輪無論 scraper 抓取水位是否已越過它們，都會優先重試，
