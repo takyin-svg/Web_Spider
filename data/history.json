@@ -1,6 +1,12 @@
 {
-  "last_run_timestamp": 1794978761,
-  "flash_seen_ids": [],
+  "last_run_timestamp": 1794981287,
+  "flash_seen_ids": [
+    "8117132",
+    "8117113",
+    "8117110",
+    "8117108",
+    "8117109"
+  ],
   "news_seen_links": [
     "https://www.zhitongcaijing.com/content/detail/1524865.html",
     "https://www.zhitongcaijing.com/content/detail/1524864.html",
@@ -242,7 +248,14 @@
     "ebb3f43157cc",
     "0d5b627d2b8b",
     "bb19b55dd5c7",
-    "cbbfe54cd46d"
+    "cbbfe54cd46d",
+    "https://www.zhitongcaijing.com/content/detail/1524876.html",
+    "https://www.zhitongcaijing.com/content/detail/1524868.html",
+    "https://www.zhitongcaijing.com/content/detail/1524872.html",
+    "https://www.zhitongcaijing.com/content/detail/1524870.html",
+    "https://www.zhitongcaijing.com/content/detail/1524869.html",
+    "https://www.zhitongcaijing.com/content/detail/1524867.html",
+    "https://www.zhitongcaijing.com/content/detail/1524866.html"
   ],
   "analyzed_records": [
     {
@@ -622,6 +635,30 @@
       "stock": "",
       "event": "AI_PROCESSED",
       "timestamp": "2026-11-18 13:14"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1524868.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 13:55"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1524867.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 13:55"
+    },
+    {
+      "key": "8117132",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 13:55"
+    },
+    {
+      "key": "8117113",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-18 13:55"
     }
   ]
 }
