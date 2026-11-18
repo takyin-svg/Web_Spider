@@ -1,3 +1,4 @@
+
 # src/orchestrator.py
 import os
 import time
@@ -110,7 +111,7 @@ class Orchestrator:
         filtered_news = news_filter.apply(raw_news)
         if not filtered_news:
             print("⚡ 新聞皆未命中港股或利好關鍵字。")
-            state_mgr.save(int(now.timestamp()))
+            state_mgr.save()   # 分源水位已由 scraper 推進並落盤，此處不再推進全局時間戳
             return
 
         # 3. AI 批次分析 (使用帶重試機制的包裝器)
@@ -144,8 +145,9 @@ class Orchestrator:
         else:
             print(f"📉 經 AI 研判，本次無符合 >= {MIN_SCORE} 分之高確定性利好事件。")
 
-        # 5. 確保順利完成後，才安全推進時間水位線
-        state_mgr.save(int(now.timestamp()))
+        # 5. 確保順利完成後落盤。時間水位線改由 scraper 按源推進（save_source_cutoff）：
+        #    某源超時/失敗只凍結它自己那條，不再被其他源的成功掩護著一路前移。
+        state_mgr.save()   # 不再無腦推進全局 last_run_timestamp
         print("🏁 當輪採集完畢，狀態已寫入 data/history.json。")
 
     def run(self):
