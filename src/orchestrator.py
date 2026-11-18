@@ -1,5 +1,6 @@
-#src/orchestrator.py
+
 import os
+import json
 import time
 import random
 from datetime import datetime, timedelta
@@ -17,6 +18,13 @@ class Orchestrator:
     # gemini-2.5-flash 已於 2026-11-02 棄用，12/1 起舊名請求會自動改道至
     # gemini-3.5-flash-lite 並按新模型計費——屆時請把此行改成真正的備援（如 gemini-3.5-flash）
     FALLBACK_MODEL = "gemini-2.5-flash"
+
+    # 🔧 本次修復新增：「斷點重試佇列」——凡是 AI 分析未成功（軟失敗或硬停）的新聞，
+    #   一律暫存到此檔，下一輪無論 scraper 抓取水位是否已越過它們，都會優先重試，
+    #   徹底堵死「分析失敗→水位已推進→歷史記錄擋住→未分析新聞永久遺失」的漏洞。
+    PENDING_FILE = "data/pending_analyze.json"
+    # 佇列上限，超過則先進先出丟棄最舊（催化劑時效已過，避免無限堆積）
+    MAX_PENDING = 1000
 
     def _get_window(self):
         """依據香港時間判定當前運作時段與結束時間"""
@@ -114,6 +122,45 @@ class Orchestrator:
         print(f"🛑 [批次 {batch_num}] 主模型+降級皆失敗，結束本輪分析，留待下輪重排。")
         return None, True
 
+    # ------------------------------------------------------------------
+    # 🔧 新增：斷點重試佇列的讀寫（本輪修復的核心，獨立於 scraper 抓取水位）
+    # ------------------------------------------------------------------
+    def _load_pending(self) -> list:
+        """載入上一輪未成功分析而暫存的新聞。檔不存在或損毀一律回空清單。"""
+        try:
+            with open(self.PENDING_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else []
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return []
+
+    def _save_pending(self, items: list):
+        """暫存本輪仍未成功分析的新聞，供下一輪斷點重試；超出上限則先進先出丟棄最舊。"""
+        items = items if isinstance(items, list) else []
+        if len(items) > self.MAX_PENDING:
+            dropped = len(items) - self.MAX_PENDING
+            print(f"⚠️ 待重試佇列超過上限 {self.MAX_PENDING}，丟棄最舊 {dropped} 條（催化劑時效已過）。")
+            items = items[-self.MAX_PENDING:]
+        try:
+            os.makedirs(os.path.dirname(self.PENDING_FILE) or ".", exist_ok=True)
+            with open(self.PENDING_FILE, "w", encoding="utf-8") as f:
+                json.dump(items, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            # 佇列寫入失敗不該讓整輪崩潰，但必須高調——否則仍會遺失
+            print(f"❌ 待重試佇列寫入失敗（{self.PENDING_FILE}）：{e}。該批新聞下輪可能需靠抓取水位重撿。")
+
+    def _merge_dedup(self, fresh: list, pending: list) -> list:
+        """合併「本輪新抓取」與「上輪暫存佇列」，依 unique_id 去重，新料優先（時間戳較近）。"""
+        seen = set()
+        merged = []
+        for it in (fresh + pending):
+            uid = it.get("unique_id")
+            if uid in seen:
+                continue
+            seen.add(uid)
+            merged.append(it)
+        return merged
+
     def _execute_pipeline(self, state_mgr, scraper, news_filter, analyzer, notifier):
         """執行單次完整的增量採集、初篩、Gemini 分析與飛書推送流程"""
         cutoff_ts = state_mgr.get_cutoff_timestamp()
@@ -124,30 +171,42 @@ class Orchestrator:
         print(f"⏱️ 本次採集時間下限 (Cutoff): {datetime.fromtimestamp(cutoff_ts, HKT).strftime('%Y-%m-%d %H:%M:%S')}")
         print("==================================================")
 
+        # 載入上輪未分析成功的暫存佇列（斷點重試來源，不受抓取水位影響）
+        pending = self._load_pending()
+
         # 1. 多源增量爬取
         raw_news = scraper.fetch_all(cutoff_ts, state_mgr)
 
-        # 🚨 關鍵防護：若本次因網路逾時或異常導致抓取量為 0，絕對不更新 history.json 的 Cutoff 時間戳！
-        if not raw_news:
+        # 🚨 關鍵防護：若本次因網路逾時或異常導致抓取量為 0，且佇列也空，
+        #    絕對不更新 history.json 的 Cutoff 時間戳（若佇列非空則仍需繼續把佇列吃掉）。
+        if not raw_news and not pending:
             print("📭 本次採集為空（可能遇網路逾時或暫無更新），保留原 Cutoff 留待下輪重試，不更新狀態。")
             state_mgr.save()
             return
 
         # 2. 關鍵字初篩與同事件去重
-        filtered_news = news_filter.apply(raw_news)
-        if not filtered_news:
+        filtered_news = news_filter.apply(raw_news) if raw_news else []
+        if not filtered_news and not pending:
             print("⚡ 新聞皆未命中港股或利好關鍵字。")
             state_mgr.save()   # 分源水位已由 scraper 推進並落盤，此處不再推進全局時間戳
             return
 
+        # 2.5 🔧 併入暫存佇列：新料在前、暫存佇列在後，依 unique_id 去重
+        worklist = self._merge_dedup(filtered_news, pending)
+        if pending:
+            print(f"♻️ 併入上輪未分析成功的暫存 {len(pending)} 條；本輪待分析清單去重後共 {len(worklist)} 條。")
+
         # 3. AI 批次分析 (使用帶重試機制的包裝器)
-        total_count = len(filtered_news)
+        total_count = len(worklist)
         print(f"🤖 共有 {total_count} 條新聞進入 Gemini 深度量化分析...")
         analyzed_results = []
         batch_size = 20
 
+        # 🔧 本輪未能成功分析、需暫存到下輪的新聞清單
+        retry_items = []
+
         for i in range(0, total_count, batch_size):
-            batch = filtered_news[i:i + batch_size]
+            batch = worklist[i:i + batch_size]
             batch_num = i // batch_size + 1
             end_idx = min(i + batch_size, total_count)
 
@@ -161,9 +220,16 @@ class Orchestrator:
                     state_mgr.add_analyzed_record(item.get("unique_id"), event="AI_PROCESSED")
                 analyzed_results.extend(batch_res)
             else:
-                print(f"⚠️ [批次 {batch_num}] AI 分析最終失敗，該批次 {len(batch)} 條新聞將留待下輪重試。")
+                # 🔧 該批失敗：整批進暫存佇列，下輪優先重試（不再依賴抓取水位能否重撿）
+                retry_items.extend(batch)
+                print(f"⚠️ [批次 {batch_num}] AI 分析最終失敗，該批次 {len(batch)} 條新聞已進入待重試佇列。")
                 # 🛑 硬停：主模型與降級皆失敗，判定容量高峰，結束本輪剩餘批次、重排下一輪
                 if hard_stop:
+                    # 🔧 硬停之後尚未處理的所有批次，一併進佇列，絕不遺漏
+                    tail = worklist[i + batch_size:]
+                    if tail:
+                        retry_items.extend(tail)
+                        print(f"🛑 本輪提前結束，其餘 {len(tail)} 條尚未分析的新聞一併暫存佇列。")
                     break
 
         # 4. 飛書推送 (動態讀取 MIN_SCORE)
@@ -174,7 +240,14 @@ class Orchestrator:
         else:
             print(f"📉 經 AI 研判，本次無符合 >= {MIN_SCORE} 分之高確定性利好事件。")
 
-        # 5. 確保順利完成後落盤。時間水位線改由 scraper 按源推進（save_source_cutoff）：
+        # 5. 🔧 落盤斷點重試佇列：有失敗就寫回，全部處理完就清空佇列檔
+        self._save_pending(retry_items)
+        if retry_items:
+            print(f"♻️ 已暫存 {len(retry_items)} 條未分析成功的新聞至 {self.PENDING_FILE}，下一輪將優先重試。")
+        elif pending:
+            print(f"♻️ 待重試佇列已全部消化，清空 {self.PENDING_FILE}。")
+
+        # 6. 確保順利完成後落盤。時間水位線改由 scraper 按源推進（save_source_cutoff）：
         #    某源超時/失敗只凍結它自己那條，不再被其他源的成功掩護著一路前移。
         state_mgr.save()   # 不再無腦推進全局 last_run_timestamp
         print("🏁 當輪採集完畢，狀態已寫入 data/history.json。")
