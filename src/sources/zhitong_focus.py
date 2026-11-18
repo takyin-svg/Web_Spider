@@ -1,4 +1,4 @@
-# src/sources/zhitong_focus.py
+# srczhitong_focus.py
 import re
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
@@ -9,9 +9,9 @@ from src.sources.base import BaseSource
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
-        # ❌ 修复 Bug 1：原 URL 缺少协议分隔符 "//"，且疑似路径错误
-        # 请确认智通财经手机版列表页的真实 URL，以下为常见格式，需自行核对
-        self.mobile_url_pattern = "https://www.zhitongcaijing.com/market.html?page={}"
+        # ✅ 改回手机版域名（原始可用地址）。桌面版 www 从 GitHub runner 访问常卡死，
+        #    就是上一轮 Page.goto 超时的根因，必须用 m 子域。
+        self.mobile_url_pattern = "https:market.html?page={}"
 
     def _parse_time_str(self, text: str) -> tuple[int, str]:
         now = datetime.now(HKT)
@@ -41,8 +41,7 @@ class ZhitongFocusSource(BaseSource):
             dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # ❌ 修复 Bug 2：原正则缺少日期分隔符 [-/]，导致 "2026-11-18 10:30" 无法匹配
-        m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
+        m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
             year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
             month = int(m_date_time.group(2))
@@ -186,7 +185,6 @@ class ZhitongFocusSource(BaseSource):
                 if should_stop or page_added == 0:
                     break
 
-        # ❌ 修复 Bug 3：locale 应为 zh-HK 以匹配港股资讯站，且补充 timezone_id
         try:
             with sync_playwright() as pw:
                 browser = pw.chromium.launch(headless=True)
