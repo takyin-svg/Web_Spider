@@ -1,21 +1,16 @@
-
-# src/sources/zhitong_focus.py
+# srczhitong_focus.py
 import re
+import html as _html
 import requests
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
-from bs4 import BeautifulSoup
 from src.config import HKT
 from src.sources.base import BaseSource
 
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
-        # ✅ 真实列表页 URL（来自你提供的首页 HTML 核实）：
-        #    智通财经是桌面站 www.zhitongcaijing.com，且列表数据【服务端静态直出】，
-        #    根本不需要浏览器渲染。"要闻/焦点"对应 tab 的真实链接是：
-        #    https://www.zhitongcaijing.com?index=yaowen&page={n}
-        #    前几轮用的 m.zhitongcaijing.com / market.html 全部是猜错的，才一直 0 条 / 域名解析失败。
+        # 真实列表页：桌面站，数据服务端静态直出，无需浏览器/bs4
         self.list_url_pattern = "https://www.zhitongcaijing.com?index=yaowen&page={}"
         self.base_url = "https://www.zhitongcaijing.com"
         self.headers = {
@@ -33,24 +28,20 @@ class ZhitongFocusSource(BaseSource):
         if not text:
             return 0, ""
 
-        # 1. 刚刚
         if any(k in text for k in ["剛", "刚"]):
             ts = int(now.timestamp())
             return ts, now.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 2. X 分钟前
         m_min = re.search(r'(\d+)\s*(?:分鐘|分钟|分)\s*前', text)
         if m_min:
             ts = int(now.timestamp()) - int(m_min.group(1)) * 60
             return ts, datetime.fromtimestamp(ts, HKT).strftime('%Y-%m-%d %H:%M:%S')
 
-        # 3. X 小时前
         m_hr = re.search(r'(\d+)\s*(?:小時|小时|h)\s*前', text)
         if m_hr:
             ts = int(now.timestamp()) - int(m_hr.group(1)) * 3600
             return ts, datetime.fromtimestamp(ts, HKT).strftime('%Y-%m-%d %H:%M:%S')
 
-        # 4. 昨天 / 前天 HH:MM
         m_yest = re.search(r'(?:昨[天日]|前[天日])\s*(\d{1,2}):(\d{1,2})', text)
         if m_yest:
             days_ago = 2 if "前" in m_yest.group(0) else 1
@@ -59,11 +50,8 @@ class ZhitongFocusSource(BaseSource):
             dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 5. YYYY-MM-DD HH:MM 或 MM-DD HH:MM
-        #    ✅ 真实页面时间就是这种格式，如 "2026-11-18 11:04"
-        #    正则必须含日期分隔符 [-/]（前几轮被改坏漏掉，这里恢复正确版）
         m_date_time = re.search(
-            r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
+            r'(?:(\d{4})[-/])?(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
             year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
             month = int(m_date_time.group(2))
@@ -74,7 +62,6 @@ class ZhitongFocusSource(BaseSource):
             dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 6. 纯当日时间 HH:MM
         m_today = re.search(r'(?:(?:今[天日])\s*)?(\b\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\b', text)
         if m_today and not re.search(r'\d{1,2}[-/月]\d{1,2}', text):
             h, m = int(m_today.group(1)), int(m_today.group(2))
@@ -83,7 +70,6 @@ class ZhitongFocusSource(BaseSource):
                 dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
                 return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 7. 中文日期 X月X日
         m_cn = re.search(r'(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', text)
         if m_cn:
             year = now.year
@@ -96,10 +82,51 @@ class ZhitongFocusSource(BaseSource):
 
         return 0, ""
 
+    @staticmethod
+    def _strip_tags(s: str) -> str:
+        s = re.sub(r'<[^>]+>', '', s)
+        return _html.unescape(s).strip()
+
+    def _extract_cards(self, page_html: str) -> list[dict]:
+        """用纯正则从静态 HTML 抽取 (title, href, raw_time)，无需 bs4。"""
+        out = []
+        # 以真实列表容器 class 切分每张卡片
+        blocks = re.split(r'<div[^>]+class="[^"]*\binfo-list-item\b[^"]*"', page_html)
+        for blk in blocks[1:]:
+            # 标题块内的第一个 <a href="...">...</a>
+            title_m = re.search(
+                r'class="[^"]*info-item-content-title[^"]*".*?<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+                blk, re.DOTALL)
+            if not title_m:
+                title_m = re.search(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', blk, re.DOTALL)
+            if not title_m:
+                continue
+            href = title_m.group(1).strip()
+            title = self._strip_tags(title_m.group(2))
+            if not title or len(title) < 8:
+                continue
+            # 时间：operat 块内第一个含数字的标签文本
+            raw_time = ""
+            op_m = re.search(r'class="[^"]*info-item-content-operat[^"]*"(.*?)(?:<div|</div>\s*</div>)',
+                             blk, re.DOTALL)
+            if op_m:
+                for tm in re.finditer(r'>([^<>]*\d[^<>]*)<', op_m.group(1)):
+                    t = tm.group(1).strip()
+                    if t:
+                        raw_time = t
+                        break
+            if not raw_time:
+                # 兜底：整卡文本里正则抓时间格式
+                card_text = self._strip_tags(blk)
+                tm = re.search(r'\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}|\d{1,2}:\d{2}', card_text)
+                raw_time = tm.group(0) if tm else ""
+            out.append({"title": title, "href": href, "raw_time": raw_time})
+        return out
+
     def fetch(self, cutoff_timestamp: int, state_manager, max_pages: int = 10) -> list[dict]:
         results = []
         cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S')
-        print(f"  🔍 [{self.name}] 启动静态直出抓取（requests），目标时间下限: {cutoff_dt_str}")
+        print(f"  🔍 [{self.name}] 启动静态直出抓取（requests+re），目标时间下限: {cutoff_dt_str}")
 
         should_stop = False
 
@@ -116,29 +143,17 @@ class ZhitongFocusSource(BaseSource):
                 break
 
             resp.encoding = resp.apparent_encoding or "utf-8"
-            soup = BeautifulSoup(resp.text, "html.parser")
-
-            # ✅ 真实列表容器（HTML 实测 280 条）：div.shadow-wrap-box > div.info-list-item
-            cards = soup.select("div.shadow-wrap-box > div.info-list-item")
-            if not cards:
-                cards = soup.select("div.info-list-item")
-            if not cards:
+            batch = self._extract_cards(resp.text)
+            if not batch:
                 print(f"  ⚠️ [{self.name}] 第 {p} 页未找到 info-list-item 列表，结束翻页。")
                 break
 
             page_added = 0
-            for c in cards:
-                a = c.select_one("div.info-item-content-title a") or c.select_one('a[href*="/content/detail/"]')
-                if not a:
-                    continue
-                title = a.get_text(strip=True)
-                if not title or len(title) < 8:
-                    continue
+            for item in batch:
+                title = item["title"]
                 if any(w in title for w in ["登入", "登錄", "下載", "首頁", "版權所有"]):
                     continue
-
-                href = a.get("href") or ""
-                full_link = urljoin(self.base_url, href)
+                full_link = urljoin(self.base_url, item["href"])
 
                 # 1. 碰头历史记录 -> 立即终止
                 if state_manager.is_news_scanned(full_link):
@@ -146,19 +161,8 @@ class ZhitongFocusSource(BaseSource):
                     should_stop = True
                     break
 
-                # 2. 时间：真实页面在 div.info-item-content-operat 的第一个 <span>
-                raw_time = ""
-                operat = c.select_one("div.info-item-content-operat")
-                if operat:
-                    for s in operat.select("span"):
-                        t = s.get_text(strip=True)
-                        if t and re.search(r'\d', t):
-                            raw_time = t
-                            break
-                if not raw_time:
-                    raw_time = c.get_text(strip=True)  # 兜底，让正则从整卡文本里抓时间
-
-                pub_ts, pub_time_str = self._parse_time_str(raw_time)
+                # 2. 解析时间
+                pub_ts, pub_time_str = self._parse_time_str(item.get("raw_time", ""))
 
                 # 3. 触达时间水位线 -> 立即终止
                 if pub_ts > 0 and pub_ts <= cutoff_timestamp:
