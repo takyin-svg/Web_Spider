@@ -1,18 +1,16 @@
-如果擺脫scrapling可以取復網站資料？
-其他一律不改
-
-# src/sources/zhitong_focus.py
+# srczhitong_focus.py
 import re
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
-from scrapling.fetchers import StealthyFetcher
+# 摆脱 scrapling：改用纯 Playwright 原生驱动
+from playwright.sync_api import sync_playwright
 from src.config import HKT
 from src.sources.base import BaseSource
 
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
-        self.mobile_url_pattern = "https://m.zhitongcaijing.com/market.html?page={}"
+        self.mobile_url_pattern = "https:market.html?page={}"
 
     def _parse_time_str(self, text: str) -> tuple[int, str]:
         now = datetime.now(HKT)
@@ -46,7 +44,7 @@ class ZhitongFocusSource(BaseSource):
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
         # 4. YYYY-MM-DD HH:MM 或 MM-DD HH:MM
-        m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
+        m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
             year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
             month = int(m_date_time.group(2))
@@ -196,13 +194,22 @@ class ZhitongFocusSource(BaseSource):
                 if should_stop or page_added == 0:
                     break
 
+        # ↓↓↓ 唯一改动处：用纯 Playwright 替代 StealthyFetcher，其余逻辑完全不变 ↓↓↓
         try:
-            fetcher = StealthyFetcher(headless=True, stealth=True, timeout=45000)
-            fetcher.fetch(
-                "https://m.zhitongcaijing.com/market.html",
-                wait_until="domcontentloaded",
-                page_action=page_action_handler
-            )
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True)
+                # m 站是移动版，需带手机 UA + 视口，否则可能拿不到移动版结构
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                               "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                    viewport={"width": 390, "height": 844},
+                    locale="zh-CN",
+                )
+                page = context.new_page()
+                # page_action_handler 内部会自行从第 1 页 goto，无需先打开初始 URL
+                page_action_handler(page)
+                context.close()
+                browser.close()
         except Exception as e:
             print(f"  ⚠️ [{self.name}] 調度異常: {e}")
 
