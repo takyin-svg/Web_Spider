@@ -1,3 +1,4 @@
+
 # src/state_manager.py
 import json
 import os
@@ -10,7 +11,8 @@ class StateManager:
             "last_run_timestamp": 0,
             "flash_seen_ids": [],
             "news_seen_links": [],
-            "analyzed_records": []
+            "analyzed_records": [],
+            "source_cutoffs": {}          # 🆕 分源水位线: {源名: 最后成功覆盖到的时间戳}
         }
         self.load()
 
@@ -28,6 +30,22 @@ class StateManager:
         if last_ts > cutoff_ts:
             return max(cutoff_ts, last_ts - 300)
         return cutoff_ts
+
+    # 🆕 分源水位线：抓取前取「该源专属水位」，首次无记录时回退到全局默认窗口
+    def get_source_cutoff(self, source_name: str) -> int:
+        base = self.get_cutoff_timestamp()
+        per = self.state.get("source_cutoffs", {}).get(source_name, 0)
+        if per and per > base:
+            return max(base, per - 300)   # 留 5 分钟重叠带，防边界漏采
+        return base
+
+    # 🆕 分源水位线：仅在该源「本轮抓取成功」后推进它自己那条，绝不牵连其他源
+    def save_source_cutoff(self, source_name: str, latest_timestamp: int):
+        if not source_name or not latest_timestamp:
+            return
+        cutoffs = self.state.setdefault("source_cutoffs", {})
+        if latest_timestamp > cutoffs.get(source_name, 0):
+            cutoffs[source_name] = latest_timestamp
 
     def load(self):
         if os.path.exists(HISTORY_FILE):
@@ -52,6 +70,9 @@ class StateManager:
         self.state["flash_seen_ids"] = clean_flash
         self.state["news_seen_links"] = clean_news
         self.state["analyzed_records"] = self.state.get("analyzed_records", [])[-1000:]
+        # 🆕 兼容旧 history.json：确保 source_cutoffs 一定存在且为 dict
+        if not isinstance(self.state.get("source_cutoffs"), dict):
+            self.state["source_cutoffs"] = {}
 
     def is_news_scanned(self, unique_key) -> bool:
         if not unique_key:
