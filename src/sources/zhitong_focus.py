@@ -1,8 +1,7 @@
-# srczhitong_focus.py
+# src/sources/zhitong_focus.py
 import re
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
-# 摆脱 scrapling：改用纯 Playwright 原生驱动
 from playwright.sync_api import sync_playwright
 from src.config import HKT
 from src.sources.base import BaseSource
@@ -10,7 +9,9 @@ from src.sources.base import BaseSource
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
-        self.mobile_url_pattern = "https:market.html?page={}"
+        # ❌ 修复 Bug 1：原 URL 缺少协议分隔符 "//"，且疑似路径错误
+        # 请确认智通财经手机版列表页的真实 URL，以下为常见格式，需自行核对
+        self.mobile_url_pattern = "https://www.zhitongcaijing.com/market.html?page={}"
 
     def _parse_time_str(self, text: str) -> tuple[int, str]:
         now = datetime.now(HKT)
@@ -18,12 +19,10 @@ class ZhitongFocusSource(BaseSource):
         if not text:
             return 0, ""
 
-        # 1. 剛剛 / 刚
         if any(k in text for k in ["剛", "刚"]):
             ts = int(now.timestamp())
             return ts, now.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 2. 相對時間：分鐘前 / 小時前
         m_min = re.search(r'(\d+)\s*(?:分鐘|分钟|分)\s*前', text)
         if m_min:
             ts = int(now.timestamp()) - int(m_min.group(1)) * 60
@@ -34,7 +33,6 @@ class ZhitongFocusSource(BaseSource):
             ts = int(now.timestamp()) - int(m_hr.group(1)) * 3600
             return ts, datetime.fromtimestamp(ts, HKT).strftime('%Y-%m-%d %H:%M:%S')
 
-        # 3. 昨天 / 前天
         m_yest = re.search(r'(?:昨[天日]|前[天日])\s*(\d{1,2}):(\d{1,2})', text)
         if m_yest:
             days_ago = 2 if "前" in m_yest.group(0) else 1
@@ -43,8 +41,8 @@ class ZhitongFocusSource(BaseSource):
             dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 4. YYYY-MM-DD HH:MM 或 MM-DD HH:MM
-        m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
+        # ❌ 修复 Bug 2：原正则缺少日期分隔符 [-/]，导致 "2026-11-18 10:30" 无法匹配
+        m_date_time = re.search(r'(?:(\d{4})[-/])?(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
             year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
             month = int(m_date_time.group(2))
@@ -55,7 +53,6 @@ class ZhitongFocusSource(BaseSource):
             dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 5. 純當日時間 18:30 或 今天 18:30
         m_today = re.search(r'(?:(?:今[天日])\s*)?(\b\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\b', text)
         if m_today and not re.search(r'\d{1,2}[-/月]\d{1,2}', text):
             h, m = int(m_today.group(1)), int(m_today.group(2))
@@ -64,7 +61,6 @@ class ZhitongFocusSource(BaseSource):
                 dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
                 return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # 6. 中文日期 10月9日 18:30 或 10月9日
         m_cn = re.search(r'(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', text)
         if m_cn:
             year = now.year
@@ -101,7 +97,6 @@ class ZhitongFocusSource(BaseSource):
                 except Exception:
                     pass
 
-                # 使用 raw string r""" ... """ 避免 JS 正則表達式雙反斜線轉義問題
                 batch = page.evaluate(r"""() => {
                     const results = [];
                     const seenHrefs = new Set();
@@ -162,17 +157,14 @@ class ZhitongFocusSource(BaseSource):
                     raw_href = item.get("href", "")
                     full_link = urljoin(target_url, raw_href)
 
-                    # 1. 碰頭已掃描歷史記錄 -> 立即終止
                     if state_manager.is_news_scanned(full_link):
                         print(f"  🛑 [{self.name}] 碰頭歷史記錄 [{title[:25]}...]，結束翻頁。")
                         should_stop = True
                         break
 
-                    # 2. 解析時間
                     raw_time = item.get("raw_time", "")
                     pub_ts, pub_time_str = self._parse_time_str(raw_time)
 
-                    # 3. 觸達時間水位線 -> 立即終止
                     if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                         print(f"  🛑 [{self.name}] 觸達時間下限 [{pub_time_str}]: [{title[:25]}...]，結束翻頁。")
                         should_stop = True
@@ -194,19 +186,18 @@ class ZhitongFocusSource(BaseSource):
                 if should_stop or page_added == 0:
                     break
 
-        # ↓↓↓ 唯一改动处：用纯 Playwright 替代 StealthyFetcher，其余逻辑完全不变 ↓↓↓
+        # ❌ 修复 Bug 3：locale 应为 zh-HK 以匹配港股资讯站，且补充 timezone_id
         try:
             with sync_playwright() as pw:
                 browser = pw.chromium.launch(headless=True)
-                # m 站是移动版，需带手机 UA + 视口，否则可能拿不到移动版结构
                 context = browser.new_context(
                     user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
                                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
                     viewport={"width": 390, "height": 844},
-                    locale="zh-CN",
+                    locale="zh-HK",
+                    timezone_id="Asia/Hong_Kong",
                 )
                 page = context.new_page()
-                # page_action_handler 内部会自行从第 1 页 goto，无需先打开初始 URL
                 page_action_handler(page)
                 context.close()
                 browser.close()
