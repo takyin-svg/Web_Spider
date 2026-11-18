@@ -1,8 +1,15 @@
-
 # src/sources/zhitong_flash.py
 # 7x24 快讯源：用原生 playwright 滚动加载，突破首屏 20 条上限。
 # 停止逻辑沿用旧版三闸门：① 碰头历史记录 break ② 时间 < Cutoff break ③ 触底无新增加载 break；
 # 外加 max_scroll_rounds=10 硬上限（约 200 条）。栏目固定为港股 immediately.html?type=ganggu。
+#
+# 【本轮唯一改动 · 问题二配套】新增 self.last_run_ok 成功/失败信号：
+#   - 正常跑完滚动流程（哪怕抓到 0 条 = 确实无新增）      -> last_run_ok = True
+#   - 导航/初始化/滚动途中抛异常（Page.goto 超时等硬故障） -> last_run_ok = False
+# 目的：让上层能区分「抓到 0 条（无事发生，可推进水位）」与
+#       「抓取失败 0 条（超时空转，绝不能推进水位）」，
+#       从而实施「按源分记水位」，根治 flash 超时时 Cutoff 仍被 focus 掩护着前移、
+#       导致该时段快讯被永久漏采的问题。抓取/解析/停止三闸门逻辑一字未动。
 import re
 import hashlib
 from datetime import datetime, timedelta
@@ -19,6 +26,8 @@ _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 class ZhitongFlashSource(BaseSource):
     def __init__(self):
         super().__init__("智通7x24")
+        # 本轮抓取是否成功（供 scraper/orchestrator 判定是否推进该源水位）。默认成功。
+        self.last_run_ok = True
 
     # ---------- 文本处理 ----------
     def _split_title_and_content(self, raw_text: str) -> tuple[str, str]:
@@ -117,6 +126,8 @@ class ZhitongFlashSource(BaseSource):
 
     def fetch(self, cutoff_timestamp: int, state_manager, max_scroll_rounds: int = 10) -> list[dict]:
         results = []
+        # 每次进入抓取先重置为成功，只有真正抛异常才置 False
+        self.last_run_ok = True
         cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S')
         print(f"  🔍 [{self.name}] 启动浏览器滚动抓取，目标时间下限: {cutoff_dt_str}，最大滚动轮次: {max_scroll_rounds}")
 
@@ -239,10 +250,21 @@ class ZhitongFlashSource(BaseSource):
                             break
                 else:
                     print(f"  ℹ️ [{self.name}] 已达最大滚动轮次 {max_scroll_rounds}，提前结束（如需更多请临时调大）。")
-
-                browser.close()
         except Exception as e:
+            # 导航超时 / 浏览器初始化失败等硬故障：标记本轮该源抓取失败，
+            # 上层据此【不推进 flash 水位】，下轮从旧水位重试，杜绝永久漏采。
+            self.last_run_ok = False
             print(f"  ⚠️ [{self.name}] 调度异常: {e}")
+        finally:
+            # 无论成功/异常，确保浏览器进程被回收（长驻守护下防止 chromium 僵尸进程堆积）。
+            if browser is not None:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
 
-        print(f"  └─ [{self.name}] 本次增量共收录 {len(results)} 条快讯 (时间全部精准对齐)")
+        if not self.last_run_ok:
+            print(f"  └─ [{self.name}] 本次抓取失败（异常/超时），共收录 {len(results)} 条；该源水位保持不变。")
+        else:
+            print(f"  └─ [{self.name}] 本次增量共收录 {len(results)} 条快讯 (时间全部精准对齐)")
         return results
