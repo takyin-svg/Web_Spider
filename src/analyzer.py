@@ -11,9 +11,13 @@ class GeminiAnalyzer:
             raise ValueError("GEMINI_API_KEY 未設定")
         self.client = genai.Client(api_key=GEMINI_API_KEY)
 
-    def analyze(self, news_list: list[dict]) -> list[dict] | None:
+    def analyze(self, news_list: list[dict], model: str = None) -> list[dict] | None:
         if not news_list:
             return []
+
+        # 修復①：模型不再写死。不傳 model 時沿用原 AI_MODEL，行為與舊版完全一致；
+        #        傳入時（orchestrator 降級）則實際切到該模型，降級鏈不再是空跑。
+        target_model = model or AI_MODEL
 
         # 動態將 MIN_SCORE 注入提示詞規則中
         prompt = f"""
@@ -67,56 +71,47 @@ class GeminiAnalyzer:
         ]
         """
         
-        print(f"🧠 開始將批次新聞送入 Gemini ({AI_MODEL}) 進行深度分析與硬性排除過濾...")
+        print(f"🧠 開始將批次新聞送入 Gemini ({target_model}) 進行深度分析與硬性排除過濾...")
         analyzed_results = []
         
-        max_retries = 3
-        wait_times = [30, 60, 90]
-        
-        for attempt in range(1, max_retries + 1):
-            try:
-                res = self.client.models.generate_content(
-                    model=AI_MODEL,
-                    contents=prompt + "\n資料:\n" + json.dumps(news_list, ensure_ascii=False),
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.1 
-                    )
+        # 修復②：刪除內建 max_retries / wait_times 迴圈與 time.sleep，
+        #        改單次 try —— 成功即返回達標列表，失敗即返回 None，
+        #        把重試/降級決策完全交還 orchestrator 的單層「主3次+降級1次」策略，
+        #        不再與上層疊成雙層放大（503 場景下整晚死磕同一滿載模型）。
+        try:
+            res = self.client.models.generate_content(
+                model=target_model,
+                contents=prompt + "\n資料:\n" + json.dumps(news_list, ensure_ascii=False),
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1 
                 )
+            )
+            
+            batch_results = json.loads(res.text)
+            
+            for item in batch_results:
+                title_preview = item.get("title", "")[:20].replace("\n", "")
+                stock_code = item.get("stock_code", "")
+                stock_name = item.get("stock_name", "")
+                is_bullish = item.get("is_major_bullish", False)
+                score = item.get("score", 0)
+                confidence = item.get("confidence", 0)
+                reason = item.get("reason", "無詳細理由")
                 
-                batch_results = json.loads(res.text)
+                is_macro_news = (stock_code in ["", "無", "None"]) and (stock_name in ["", "無", "None"])
+                display_name = f"{stock_name}({stock_code})" if not is_macro_news else "宏觀無個股"
                 
-                for item in batch_results:
-                    title_preview = item.get("title", "")[:20].replace("\n", "")
-                    stock_code = item.get("stock_code", "")
-                    stock_name = item.get("stock_name", "")
-                    is_bullish = item.get("is_major_bullish", False)
-                    score = item.get("score", 0)
-                    confidence = item.get("confidence", 0)
-                    reason = item.get("reason", "無詳細理由")
-                    
-                    is_macro_news = (stock_code in ["", "無", "None"]) and (stock_name in ["", "無", "None"])
-                    display_name = f"{stock_name}({stock_code})" if not is_macro_news else "宏觀無個股"
-                    
-                    # 統一使用 MIN_SCORE 與 MIN_CONFIDENCE 動態判定
-                    if is_macro_news or not is_bullish or score < MIN_SCORE or confidence < MIN_CONFIDENCE:
-                        print(f"  ❌ [淘汰] {display_name} | 評分: {score} (置信度: {confidence}) | {title_preview}... | 原因: {reason}")
-                    else:
-                        print(f"  ✅ [達標] {display_name} | 評分: {score} (置信度: {confidence}) | {title_preview}... | 理由: {reason}")
-                        analyzed_results.append(item)
-                        
-                return analyzed_results
-                
-            except Exception as e:
-                error_msg = str(e)
-                print(f"  ⚠️ [第 {attempt} 次嘗試失敗] AI 解析或連線異常: {error_msg}")
-                
-                if attempt < max_retries:
-                    wait_time = wait_times[attempt - 1]
-                    print(f"  ⏳ 系統將於 {wait_time} 秒後要求 AI 重新分析...")
-                    time.sleep(wait_time)
+                # 統一使用 MIN_SCORE 與 MIN_CONFIDENCE 動態判定
+                if is_macro_news or not is_bullish or score < MIN_SCORE or confidence < MIN_CONFIDENCE:
+                    print(f"  ❌ [淘汰] {display_name} | 評分: {score} (置信度: {confidence}) | {title_preview}... | 原因: {reason}")
                 else:
-                    print(f"  ❌ 連續 {max_retries} 次分析失敗，觸發安全回滾機制，留待下輪處理。")
-                    return None
+                    print(f"  ✅ [達標] {display_name} | 評分: {score} (置信度: {confidence}) | {title_preview}... | 理由: {reason}")
+                    analyzed_results.append(item)
                     
-        return None
+            return analyzed_results
+                
+        except Exception as e:
+            error_msg = str(e)
+            print(f"  ⚠️ AI 解析或連線異常（單次，重試交由上層）: {error_msg}")
+            return None
