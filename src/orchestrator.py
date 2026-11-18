@@ -1,5 +1,4 @@
 
-# src/orchestrator.py
 import os
 import time
 import random
@@ -12,8 +11,12 @@ from src.analyzer import GeminiAnalyzer
 from src.feishu_notifier import FeishuNotifier
 
 class Orchestrator:
-    # AI 分析最大重試次數
-    MAX_AI_RETRIES = 6
+    # AI 分析最大重試次數（主模型）
+    MAX_AI_RETRIES = 3
+    # 主模型連續失敗後降級的備援模型
+    # gemini-2.5-flash 已於 2026-11-02 棄用，12/1 起舊名請求會自動改道至
+    # gemini-3.5-flash-lite 並按新模型計費——屆時請把此行改成真正的備援（如 gemini-3.5-flash）
+    FALLBACK_MODEL = "gemini-2.5-flash"
 
     def _get_window(self):
         """依據香港時間判定當前運作時段與結束時間"""
@@ -42,51 +45,74 @@ class Orchestrator:
 
     def _calculate_backoff(self, attempt: int) -> float:
         """
-        計算指數退避等待時間:
-        - 第1次失敗後等 30s
-        - 第2次失敗後等 60s
-        - 第3次及之後等 60s + random(0~30)s
+        503(容量不足) 的退避要對症下藥：用「分鐘級」而非秒級，並加隨機抖動。
+        - 第1次失敗後等 60s + rand(0~30)
+        - 第2次失敗後等 120s + rand(0~30)
+        - 第3次失敗後等 180s + rand(0~30)
+        抖動避免多進程/多批次在同一刻同步重試（雷群效應）。
         """
-        if attempt == 1:
-            return 30.0
-        elif attempt == 2:
-            return 60.0
-        else:
-            return 60.0 + random.uniform(0, 30)
+        base = [60.0, 120.0, 180.0][min(attempt, 3) - 1]
+        return base + random.uniform(0, 30)
 
-    def _analyze_with_retry(self, analyzer: GeminiAnalyzer, batch: list, batch_num: int) -> list | None:
+    def _call_with_model(self, analyzer: GeminiAnalyzer, batch: list, model: str) -> list | None:
         """
-        帶重試機制的 AI 分析包裝器
-        最多重試 8 次，採用 30s → 60s → 60s+rand(30s) 退避策略
+        以指定模型調用 analyzer.analyze。
+        優先走 model= 入參（上一輪已改好的 analyzer 支援）；
+        若舊版 analyze 不接受 model 關鍵字，則臨時覆寫 analyzer.model 屬性再調，調完還原。
         """
+        try:
+            return analyzer.analyze(batch, model=model)
+        except TypeError:
+            old = getattr(analyzer, "model", None)
+            try:
+                analyzer.model = model
+                return analyzer.analyze(batch)
+            finally:
+                if old is not None:
+                    analyzer.model = old
+
+    def _analyze_with_retry(self, analyzer: GeminiAnalyzer, batch: list, batch_num: int) -> tuple[list | None, bool]:
+        """
+        帶「主模型 3 次分鐘級退避 + 降級 1 次」策略的 AI 分析包裝器。
+
+        回傳 (batch_res, hard_stop):
+          - batch_res 為列表：分析成功（可能為空列表=該批無達標）。
+          - batch_res 為 None 且 hard_stop=False：軟失敗，僅該批留待下輪，不中斷其餘批次。
+          - batch_res 為 None 且 hard_stop=True：主模型與降級模型皆失敗，判定進入容量高峰，
+            呼叫方應立即結束本輪剩餘批次、重新排下一輪。
+        """
+        # ---- 主模型：最多 MAX_AI_RETRIES 次，分鐘級退避+抖動 ----
         for attempt in range(1, self.MAX_AI_RETRIES + 1):
             try:
                 result = analyzer.analyze(batch)
                 if result is not None:
                     if attempt > 1:
                         print(f"✅ [批次 {batch_num}] 第 {attempt} 次嘗試成功！")
-                    return result
-
-                # analyze 返回 None 視為可重試的軟失敗
-                if attempt < self.MAX_AI_RETRIES:
-                    wait = self._calculate_backoff(attempt)
-                    print(f"⚠️ [批次 {batch_num}] AI 返回空結果 (嘗試 {attempt}/{self.MAX_AI_RETRIES})，{wait:.1f}s 後重試...")
-                    time.sleep(wait)
-                else:
-                    print(f"❌ [批次 {batch_num}] AI 連續 {self.MAX_AI_RETRIES} 次返回空結果，放棄該批次。")
-                    return None
-
+                    return result, False
+                err = "AI 返回空結果"
             except Exception as e:
-                if attempt < self.MAX_AI_RETRIES:
-                    wait = self._calculate_backoff(attempt)
-                    print(f"🔥 [批次 {batch_num}] AI 調用異常: {type(e).__name__}: {e}")
-                    print(f"   ⏳ 第 {attempt}/{self.MAX_AI_RETRIES} 次失敗，{wait:.1f}s 後重試...")
-                    time.sleep(wait)
-                else:
-                    print(f"💀 [批次 {batch_num}] AI 調用連續 {self.MAX_AI_RETRIES} 次失敗，最終錯誤: {e}")
-                    return None
+                err = f"{type(e).__name__}: {e}"
 
-        return None
+            if attempt < self.MAX_AI_RETRIES:
+                wait = self._calculate_backoff(attempt)
+                print(f"⚠️ [批次 {batch_num}] {err}（{attempt}/{self.MAX_AI_RETRIES}），{wait:.0f}s 後重試...")
+                time.sleep(wait)
+            else:
+                print(f"⚠️ [批次 {batch_num}] 主模型連續 {self.MAX_AI_RETRIES} 次失敗：{err}")
+
+        # ---- 主模型 3 次皆敗 → 降級到備援模型打一次 ----
+        print(f"🔄 [批次 {batch_num}] 降級至 {self.FALLBACK_MODEL} 嘗試一次...")
+        try:
+            result = self._call_with_model(analyzer, batch, self.FALLBACK_MODEL)
+            if result is not None:
+                print(f"✅ [批次 {batch_num}] 降級模型成功！")
+                return result, False
+        except Exception as e:
+            print(f"💀 [批次 {batch_num}] 降級模型亦失敗：{type(e).__name__}: {e}")
+
+        # ---- 主模型 + 降級都失敗：硬停，結束本輪 ----
+        print(f"🛑 [批次 {batch_num}] 主模型+降級皆失敗，結束本輪分析，留待下輪重排。")
+        return None, True
 
     def _execute_pipeline(self, state_mgr, scraper, news_filter, analyzer, notifier):
         """執行單次完整的增量採集、初篩、Gemini 分析與飛書推送流程"""
@@ -127,8 +153,8 @@ class Orchestrator:
 
             print(f"🧠 [批次 {batch_num}] 開始將第 {i+1} 至 {end_idx} 條新聞 (共 {len(batch)} 條) 送入 AI 分析...")
 
-            # ✅ 核心變更：使用帶 8 次重試 + 動態退避的分析方法
-            batch_res = self._analyze_with_retry(analyzer, batch, batch_num)
+            # ✅ 核心變更：主模型 3 次分鐘級退避 + 降級 1 次，回傳 (結果, 是否硬停)
+            batch_res, hard_stop = self._analyze_with_retry(analyzer, batch, batch_num)
 
             if batch_res is not None:
                 for item in batch:
@@ -136,6 +162,9 @@ class Orchestrator:
                 analyzed_results.extend(batch_res)
             else:
                 print(f"⚠️ [批次 {batch_num}] AI 分析最終失敗，該批次 {len(batch)} 條新聞將留待下輪重試。")
+                # 🛑 硬停：主模型與降級皆失敗，判定容量高峰，結束本輪剩餘批次、重排下一輪
+                if hard_stop:
+                    break
 
         # 4. 飛書推送 (動態讀取 MIN_SCORE)
         if analyzed_results:
