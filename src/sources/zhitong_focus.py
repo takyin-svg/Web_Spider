@@ -1,4 +1,5 @@
-# srczhitong_focus.py
+
+# src/sources/zhitong_focus.py
 import re
 import html as _html
 import requests
@@ -51,18 +52,26 @@ class ZhitongFocusSource(BaseSource):
             dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # ★ 修复点：补回日期分隔符 [-/]，捕获组顺序=年/月/日/时/分/秒
+        # 完整日期时间 YYYY-MM-DD HH:MM(:SS) 或 MM-DD HH:MM
+        # 月/日之间必须用分隔符 [-/]（这是前几轮 int(None) 崩溃的根因：缺它会让捕获组错位、
+        # 把分钟挤到可选的"秒"组上）。捕获组顺序=年/月/日/时/分/秒；
+        # 任何越界/异常都落到下方其它分支，绝不抛出 int(None) 或 ValueError。
+        SEP = r"[-/]"
         m_date_time = re.search(
-            r'(?:(\d{4})[-/])?(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
+            rf"(?:(\d{{4}}){SEP})?(\d{{1,2}}){SEP}(\d{{1,2}})\s+"
+            rf"(\d{{1,2}}):(\d{{1,2}})(?::(\d{{1,2}}))?", text)
         if m_date_time:
-            year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
-            month = int(m_date_time.group(2))
-            day = int(m_date_time.group(3))
-            hour = int(m_date_time.group(4))
-            minute = int(m_date_time.group(5))
-            second = int(m_date_time.group(6)) if m_date_time.group(6) else 0
-            dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT)
-            return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
+            try:
+                year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
+                month = int(m_date_time.group(2))
+                day = int(m_date_time.group(3))
+                hour = int(m_date_time.group(4))
+                minute = int(m_date_time.group(5)) if m_date_time.group(5) else 0
+                second = int(m_date_time.group(6)) if m_date_time.group(6) else 0
+                dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT)
+                return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                pass
 
         m_today = re.search(r'(?:(?:今[天日])\s*)?(\b\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\b', text)
         if m_today and not re.search(r'\d{1,2}[-/月]\d{1,2}', text):
@@ -74,13 +83,16 @@ class ZhitongFocusSource(BaseSource):
 
         m_cn = re.search(r'(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', text)
         if m_cn:
-            year = now.year
-            month = int(m_cn.group(1))
-            day = int(m_cn.group(2))
-            hour = int(m_cn.group(3)) if m_cn.group(3) else 22
-            minute = int(m_cn.group(4)) if m_cn.group(4) else 0
-            dt = datetime(year, month, day, hour, minute, 0, tzinfo=HKT)
-            return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
+            try:
+                year = now.year
+                month = int(m_cn.group(1))
+                day = int(m_cn.group(2))
+                hour = int(m_cn.group(3)) if m_cn.group(3) else 22
+                minute = int(m_cn.group(4)) if m_cn.group(4) else 0
+                dt = datetime(year, month, day, hour, minute, 0, tzinfo=HKT)
+                return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                pass
 
         return 0, ""
 
