@@ -2,6 +2,7 @@
 # src/sources/zhitong_focus.py
 import re
 import html as _html
+import time
 import requests
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
@@ -12,17 +13,19 @@ from src.sources.base import BaseSource
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
-        # 真实列表页：桌面站，数据服务端静态直出，无需浏览器/bs4
+        # 桌面站静态直出，requests 即可拿全量列表，无需浏览器/bs4
         self.list_url_pattern = "https://www.zhitongcaijing.com?index=yaowen&page={}"
         self.base_url = "https://www.zhitongcaijing.com"
         self.headers = {
-            "User-Agent": (
+            'User-Agent': (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                 "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
             ),
-            "Accept-Language": "zh-CN,zh;q=0.9,zh-HK;q=0.8",
-            "Referer": "https://www.zhitongcaijing.com/",
+            'Accept-Language': "zh-CN,zh;q=0.9,zh-HK;q=0.8",
+            'Referer': "https://www.zhitongcaijing.com/",
         }
+        # 日期分隔符用变量拼接，规避聊天渲染吞字的老坑
+        self.SEP = r"[-/]"
 
     def _parse_time_str(self, text: str) -> tuple[int, str]:
         now = datetime.now(HKT)
@@ -48,25 +51,23 @@ class ZhitongFocusSource(BaseSource):
         if m_yest:
             days_ago = 2 if "前" in m_yest.group(0) else 1
             target_day = now - timedelta(days=days_ago)
-            h, m = int(m_yest.group(1)), int(m_yest.group(2))
-            dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
-            return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
+            try:
+                h, m = int(m_yest.group(1)), int(m_yest.group(2))
+                dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
+                return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                pass
 
-        # 完整日期时间 YYYY-MM-DD HH:MM(:SS) 或 MM-DD HH:MM
-        # 月/日之间必须用分隔符 [-/]（这是前几轮 int(None) 崩溃的根因：缺它会让捕获组错位、
-        # 把分钟挤到可选的"秒"组上）。捕获组顺序=年/月/日/时/分/秒；
-        # 任何越界/异常都落到下方其它分支，绝不抛出 int(None) 或 ValueError。
-        SEP = r"[-/]"
-        m_date_time = re.search(
-            rf"(?:(\d{{4}}){SEP})?(\d{{1,2}}){SEP}(\d{{1,2}})\s+"
-            rf"(\d{{1,2}}):(\d{{1,2}})(?::(\d{{1,2}}))?", text)
+        # 完整日期时间：年/月/日 之间必须是日期分隔符 [-/]，捕获组顺序=年/月/日/时/分/秒
+        pat = rf'(?:(\d{{4}}){self.SEP})?(\d{{1,2}}){self.SEP}(\d{{1,2}})\s+(\d{{1,2}}):(\d{{1,2}})(?::(\d{{1,2}}))?'
+        m_date_time = re.search(pat, text)
         if m_date_time:
             try:
                 year = int(m_date_time.group(1)) if m_date_time.group(1) else now.year
                 month = int(m_date_time.group(2))
                 day = int(m_date_time.group(3))
                 hour = int(m_date_time.group(4))
-                minute = int(m_date_time.group(5)) if m_date_time.group(5) else 0
+                minute = int(m_date_time.group(5)) if m_date_time.group(5) is not None else 0
                 second = int(m_date_time.group(6)) if m_date_time.group(6) else 0
                 dt = datetime(year, month, day, hour, minute, second, tzinfo=HKT)
                 return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -75,11 +76,14 @@ class ZhitongFocusSource(BaseSource):
 
         m_today = re.search(r'(?:(?:今[天日])\s*)?(\b\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\b', text)
         if m_today and not re.search(r'\d{1,2}[-/月]\d{1,2}', text):
-            h, m = int(m_today.group(1)), int(m_today.group(2))
-            s = int(m_today.group(3)) if m_today.group(3) else 0
-            if 0 <= h <= 23 and 0 <= m <= 59:
-                dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
-                return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
+            try:
+                h, m = int(m_today.group(1)), int(m_today.group(2))
+                s = int(m_today.group(3)) if m_today.group(3) else 0
+                if 0 <= h <= 23 and 0 <= m <= 59:
+                    dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
+                    return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                pass
 
         m_cn = re.search(r'(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', text)
         if m_cn:
@@ -102,7 +106,7 @@ class ZhitongFocusSource(BaseSource):
         return _html.unescape(s).strip()
 
     def _extract_cards(self, page_html: str) -> list[dict]:
-        """用纯正则从静态 HTML 抽取 (title, href, raw_time)，无需 bs4。"""
+        """纯正则从静态 HTML 抽取 (title, href, raw_time)，无需 bs4。"""
         out = []
         blocks = re.split(r'<div[^>]+class="[^"]*\binfo-list-item\b[^"]*"', page_html)
         for blk in blocks[1:]:
@@ -129,18 +133,19 @@ class ZhitongFocusSource(BaseSource):
                         break
             if not raw_time:
                 card_text = self._strip_tags(blk)
-                tm = re.search(
-                    r'\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}|\d{1,2}:\d{2}', card_text)
+                tm = re.search(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}|\d{1,2}:\d{2}', card_text)
                 raw_time = tm.group(0) if tm else ""
             out.append({"title": title, "href": href, "raw_time": raw_time})
         return out
 
     def fetch(self, cutoff_timestamp: int, state_manager, max_pages: int = 10) -> list[dict]:
+        # ★ max_pages 硬上限 = 10：最多翻 10 页（约 200 条），与四闸门并存
         results = []
         cutoff_dt_str = datetime.fromtimestamp(cutoff_timestamp, HKT).strftime('%Y-%m-%d %H:%M:%S')
-        print(f"  🔍 [{self.name}] 启动静态直出抓取（requests+re），目标时间下限: {cutoff_dt_str}")
+        print(f"  🔍 [{self.name}] 启动静态直出抓取（requests+re），目标时间下限: {cutoff_dt_str}，最大翻页: {max_pages} 页")
 
-        should_stop = False
+        hit_cutoff = False          # ① 时间下限：唯一能终止整轮翻页的条件
+        empty_streak = 0            # ③ 连续空收页防呆：避免历史深处空翻
 
         for p in range(1, max_pages + 1):
             target_url = self.list_url_pattern.format(p)
@@ -167,16 +172,16 @@ class ZhitongFocusSource(BaseSource):
                     continue
                 full_link = urljoin(self.base_url, item["href"])
 
+                # ② 碰头历史记录：只跳过该条，绝不 break —— 这是修复 20 条上限的关键
                 if state_manager.is_news_scanned(full_link):
-                    print(f"  🛑 [{self.name}] 碰头历史记录 [{title[:25]}...]，结束翻页。")
-                    should_stop = True
-                    break
+                    continue
 
                 pub_ts, pub_time_str = self._parse_time_str(item.get("raw_time", ""))
 
+                # ① 触达时间下限：主力退出条件，命中即终止整轮翻页
                 if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                     print(f"  🛑 [{self.name}] 触达时间下限 [{pub_time_str}]: [{title[:25]}...]，结束翻页。")
-                    should_stop = True
+                    hit_cutoff = True
                     break
 
                 if not pub_time_str:
@@ -192,8 +197,23 @@ class ZhitongFocusSource(BaseSource):
                 state_manager.add_scanned(full_link)
                 page_added += 1
 
-            if should_stop or page_added == 0:
+            if hit_cutoff:
                 break
+
+            # ③ 整页都是碰头/过滤掉的新页：累计连续空收，达到 2 页才停（继续往后翻以越过边界旧闻）
+            if page_added == 0:
+                empty_streak += 1
+                if empty_streak >= 2:
+                    print(f"  ℹ️ [{self.name}] 连续 {empty_streak} 页无新增，结束翻页。")
+                    break
+            else:
+                empty_streak = 0
+
+            time.sleep(0.6)  # 逐页之间稍作停顿，防反爬
+
+        else:
+            # for 正常跑完（未被任何 break 打断）= 触及 max_pages 硬上限
+            print(f"  ℹ️ [{self.name}] 已达最大翻页上限 {max_pages} 页，提前结束（如需更多请临时调大 max_pages）。")
 
         print(f"  └─ [{self.name}] 本次增量共收录 {len(results)} 条新闻 (时间全部精准对齐)")
         return results
