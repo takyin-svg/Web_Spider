@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 from src.config import HKT
 from src.sources.base import BaseSource
 
+
 class ZhitongFocusSource(BaseSource):
     def __init__(self):
         super().__init__("智通焦點")
@@ -50,6 +51,7 @@ class ZhitongFocusSource(BaseSource):
             dt = target_day.replace(hour=h, minute=m, second=0, microsecond=0)
             return int(dt.timestamp()), dt.strftime('%Y-%m-%d %H:%M:%S')
 
+        # ★ 修复点：补回日期分隔符 [-/]，捕获组顺序=年/月/日/时/分/秒
         m_date_time = re.search(
             r'(?:(\d{4})[-/])?(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', text)
         if m_date_time:
@@ -90,10 +92,8 @@ class ZhitongFocusSource(BaseSource):
     def _extract_cards(self, page_html: str) -> list[dict]:
         """用纯正则从静态 HTML 抽取 (title, href, raw_time)，无需 bs4。"""
         out = []
-        # 以真实列表容器 class 切分每张卡片
         blocks = re.split(r'<div[^>]+class="[^"]*\binfo-list-item\b[^"]*"', page_html)
         for blk in blocks[1:]:
-            # 标题块内的第一个 <a href="...">...</a>
             title_m = re.search(
                 r'class="[^"]*info-item-content-title[^"]*".*?<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
                 blk, re.DOTALL)
@@ -105,10 +105,10 @@ class ZhitongFocusSource(BaseSource):
             title = self._strip_tags(title_m.group(2))
             if not title or len(title) < 8:
                 continue
-            # 时间：operat 块内第一个含数字的标签文本
             raw_time = ""
-            op_m = re.search(r'class="[^"]*info-item-content-operat[^"]*"(.*?)(?:<div|</div>\s*</div>)',
-                             blk, re.DOTALL)
+            op_m = re.search(
+                r'class="[^"]*info-item-content-operat[^"]*"(.*?)(?:<div|</div>\s*</div>)',
+                blk, re.DOTALL)
             if op_m:
                 for tm in re.finditer(r'>([^<>]*\d[^<>]*)<', op_m.group(1)):
                     t = tm.group(1).strip()
@@ -116,9 +116,9 @@ class ZhitongFocusSource(BaseSource):
                         raw_time = t
                         break
             if not raw_time:
-                # 兜底：整卡文本里正则抓时间格式
                 card_text = self._strip_tags(blk)
-                tm = re.search(r'\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}|\d{1,2}:\d{2}', card_text)
+                tm = re.search(
+                    r'\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}|\d{1,2}:\d{2}', card_text)
                 raw_time = tm.group(0) if tm else ""
             out.append({"title": title, "href": href, "raw_time": raw_time})
         return out
@@ -155,16 +155,13 @@ class ZhitongFocusSource(BaseSource):
                     continue
                 full_link = urljoin(self.base_url, item["href"])
 
-                # 1. 碰头历史记录 -> 立即终止
                 if state_manager.is_news_scanned(full_link):
                     print(f"  🛑 [{self.name}] 碰头历史记录 [{title[:25]}...]，结束翻页。")
                     should_stop = True
                     break
 
-                # 2. 解析时间
                 pub_ts, pub_time_str = self._parse_time_str(item.get("raw_time", ""))
 
-                # 3. 触达时间水位线 -> 立即终止
                 if pub_ts > 0 and pub_ts <= cutoff_timestamp:
                     print(f"  🛑 [{self.name}] 触达时间下限 [{pub_time_str}]: [{title[:25]}...]，结束翻页。")
                     should_stop = True
