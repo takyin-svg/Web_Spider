@@ -2,7 +2,7 @@
 import re
 import hashlib
 from datetime import datetime, timezone, timedelta
-from scrapling.fetchers import StealthyFetcher
+from playwright.sync_api import sync_playwright
 from src.config import ZHITONG_FLASH_URL, HKT
 from src.sources.base import BaseSource
 
@@ -88,6 +88,12 @@ class ZhitongFlashSource(BaseSource):
         def page_action_handler(page):
             nonlocal should_stop
             page.route("**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ico}", lambda r: r.abort())
+
+            try:
+                page.goto(ZHITONG_FLASH_URL, wait_until="domcontentloaded", timeout=30000)
+            except Exception as e:
+                print(f"  ⚠️ [{self.name}] 頁面開啟超時: {e}")
+                return
 
             try:
                 page.wait_for_selector("div.allday-item, div.allday-item-content", timeout=20000)
@@ -187,12 +193,20 @@ class ZhitongFlashSource(BaseSource):
                     break
 
         try:
-            fetcher = StealthyFetcher(headless=True, stealth=True, timeout=30000)
-            fetcher.fetch(
-                ZHITONG_FLASH_URL,
-                wait_until="domcontentloaded",
-                page_action=page_action_handler
-            )
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                               "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                    viewport={"width": 390, "height": 844},
+                    locale="zh-HK",
+                    timezone_id="Asia/Hong_Kong",
+                )
+                page = context.new_page()
+                page.set_default_timeout(30000)
+                page_action_handler(page)
+                context.close()
+                browser.close()
         except Exception as e:
             print(f"  ⚠️ [{self.name}] 調度異常: {e}")
 
