@@ -1,5 +1,6 @@
 # src/filters.py
 import re
+import unicodedata
 from typing import List, Dict
 from src.config import HK_KEYWORDS, BASIC_BULLISH
 
@@ -15,18 +16,41 @@ class NewsFilter:
             return m.group(1) or m.group(2) or m.group(3) or m.group(4) or ""
         return ""
 
+    @staticmethod
+    def _normalize_title(title: str) -> str:
+        """
+        跨源标题归一化（修复跨源去重失效的核心）：
+        把 focus(要闻) 与 flash(7x24) 对同一事件的不同写法收敛到同一形态，
+        使后续生成的指纹可对齐。只抹除"来源格式差异"，不改变事件语义：
+          1. NFKC 全角 -> 半角（（）．，：！？ 及全角数字字母）
+          2. 剥除 flash 快讯标题外层的【】方括号
+          3. 剥除 .HK / .hk 代码后缀（focus 常写 (02272)、flash 常写 (02272.HK)）
+          4. 剥除括号内与裸写的股票代码数字（代码已由 _extract_stock_code 单独入指纹，
+             标题里再带一遍会造成 focus/flash 因 .HK 与否而分叉）
+        """
+        t = unicodedata.normalize('NFKC', title)
+        t = re.sub(r'[【】\[\]]', '', t)
+        t = re.sub(r'\.HK\b', '', t, flags=re.I)
+        t = re.sub(r'\(\d{4,6}\)', '', t)
+        t = re.sub(r'\b\d{4,6}\b', '', t)
+        return t
+
     def _generate_event_fingerprint(self, item: Dict) -> str:
         """
         生成事件唯一指紋：股票代碼 + 核心動作 + 實體 + 標題前15字
         修復：加入標題特徵，避免同一股票的多個獨立利好被錯誤合併
+        修復：標題先经 _normalize_title 归一化，使 focus/flash 跨源同一事件指纹对齐
         """
         title = item.get("title", "")
         content = item.get("content", "")
         full_text = f"{title} {content}"
 
+        # 归一化后的标题，用于生成跨源一致的标题签名
+        norm_title = self._normalize_title(title)
+
         code = self._extract_stock_code(full_text)
         if not code:
-            clean_title = re.sub(r'[^\w\u4e00-\u9fa5]', '', title)
+            clean_title = re.sub(r'[^\w\u4e00-\u9fa5]', '', norm_title)
             return clean_title[:30]  # 無代碼時用更長的標題特徵
 
         action = "other"
@@ -48,8 +72,8 @@ class NewsFilter:
                 entity = ent.lower()
                 break
 
-        # 🚨 關鍵修復：加入標題清洗後的前15字作為區分因子
-        title_sig = re.sub(r'[^\w\u4e00-\u9fa5]', '', title)[:15]
+        # 🚨 關鍵修復：使用归一化后标题清洗的前15字作為區分因子（跨源可对齐）
+        title_sig = re.sub(r'[^\w\u4e00-\u9fa5]', '', norm_title)[:15]
 
         return f"{code}_{action}_{entity}_{title_sig}".strip("_")
 
