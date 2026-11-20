@@ -538,7 +538,52 @@
     "8126140",
     "8126136",
     "8126166",
-    "8126177"
+    "8126177",
+    "8126281",
+    "8126283",
+    "8126269",
+    "8126249",
+    "8126242",
+    "8126199",
+    "8126306",
+    "8126302",
+    "8126307",
+    "8126341",
+    "8126371",
+    "8126369",
+    "8126368",
+    "8126346",
+    "8126420",
+    "8126393",
+    "8126441",
+    "8126447",
+    "8126464",
+    "8126459",
+    "8126461",
+    "8126470",
+    "8126501",
+    "8126499",
+    "8126520",
+    "8126515",
+    "8126524",
+    "8126536",
+    "8126590",
+    "8126692",
+    "8126698",
+    "8126722",
+    "8126781",
+    "8126770",
+    "8126763",
+    "8126824",
+    "8126859",
+    "8126933",
+    "8126944",
+    "8126999",
+    "8127054",
+    "8127100",
+    "8127102",
+    "8127169",
+    "8127177"
   ],
   "news_seen_links": [
     "https://www.zhitongcaijing.com/content/detail/1525331.html",
@@ -1113,7 +1158,53 @@
     "https://www.zhitongcaijing.com/content/detail/1526068.html",
     "https://www.zhitongcaijing.com/content/detail/1526066.html",
     "https://www.zhitongcaijing.com/content/detail/1526069.html",
-    "https://www.zhitongcaijing.com/content/detail/1526070.html"
+    "https://www.zhitongcaijing.com/content/detail/1526070.html",
+    "https://www.zhitongcaijing.com/content/detail/1526081.html",
+    "https://www.zhitongcaijing.com/content/detail/1526082.html",
+    "https://www.zhitongcaijing.com/content/detail/1526080.html",
+    "https://www.zhitongcaijing.com/content/detail/1526078.html",
+    "https://www.zhitongcaijing.com/content/detail/1526076.html",
+    "https://www.zhitongcaijing.com/content/detail/1526075.html",
+    "https://www.zhitongcaijing.com/content/detail/1526074.html",
+    "https://www.zhitongcaijing.com/content/detail/1526085.html",
+    "https://www.zhitongcaijing.com/content/detail/1526083.html",
+    "https://www.zhitongcaijing.com/content/detail/1526087.html",
+    "https://www.zhitongcaijing.com/content/detail/1526089.html",
+    "https://www.zhitongcaijing.com/content/detail/1526090.html",
+    "https://www.zhitongcaijing.com/content/detail/1526098.html",
+    "https://www.zhitongcaijing.com/content/detail/1526097.html",
+    "https://www.zhitongcaijing.com/content/detail/1526095.html",
+    "https://www.zhitongcaijing.com/content/detail/1526106.html",
+    "https://www.zhitongcaijing.com/content/detail/1526100.html",
+    "https://www.zhitongcaijing.com/content/detail/1526111.html",
+    "https://www.zhitongcaijing.com/content/detail/1526114.html",
+    "https://www.zhitongcaijing.com/content/detail/1526120.html",
+    "https://www.zhitongcaijing.com/content/detail/1526119.html",
+    "https://www.zhitongcaijing.com/content/detail/1526118.html",
+    "https://www.zhitongcaijing.com/content/detail/1526105.html",
+    "https://www.zhitongcaijing.com/content/detail/1526121.html",
+    "https://www.zhitongcaijing.com/content/detail/1526123.html",
+    "https://www.zhitongcaijing.com/content/detail/1526122.html",
+    "https://www.zhitongcaijing.com/content/detail/1526125.html",
+    "https://www.zhitongcaijing.com/content/detail/1526124.html",
+    "https://www.zhitongcaijing.com/content/detail/1526126.html",
+    "https://www.zhitongcaijing.com/content/detail/1526127.html",
+    "https://www.zhitongcaijing.com/content/detail/1526128.html",
+    "https://www.zhitongcaijing.com/content/detail/1526133.html",
+    "https://www.zhitongcaijing.com/content/detail/1526134.html",
+    "https://www.zhitongcaijing.com/content/detail/1526141.html",
+    "https://www.zhitongcaijing.com/content/detail/1526153.html",
+    "https://www.zhitongcaijing.com/content/detail/1526151.html",
+    "https://www.zhitongcaijing.com/content/detail/1526150.html",
+    "https://www.zhitongcaijing.com/content/detail/1526155.html",
+    "https://www.zhitongcaijing.com/content/detail/1526159.html",
+    "https://www.zhitongcaijing.com/content/detail/1526161.html",
+    "https://www.zhitongcaijing.com/content/detail/1526165.html",
+    "https://www.zhitongcaijing.com/content/detail/1526167.html",
+    "https://www.zhitongcaijing.com/content/detail/1526173.html",
+    "https://www.zhitongcaijing.com/content/detail/1526178.html",
+    "https://www.zhitongcaijing.com/content/detail/1526182.html",
+    "https://www.zhitongcaijing.com/content/detail/1526194.html"
   ],
   "analyzed_records": [
     {
@@ -2513,10 +2604,190 @@
       "stock": "",
       "event": "AI_PROCESSED",
       "timestamp": "2026-11-20 10:20"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526081.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 10:53"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526082.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 10:53"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526076.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 10:53"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526083.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 10:57"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526089.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:06"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526090.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:15"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526095.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:22"
+    },
+    {
+      "key": "8126369",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:22"
+    },
+    {
+      "key": "8126346",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:22"
+    },
+    {
+      "key": "8126441",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:43"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526120.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:57"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526118.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:57"
+    },
+    {
+      "key": "8126459",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:57"
+    },
+    {
+      "key": "8126461",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 11:57"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526125.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 12:15"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526124.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 12:15"
+    },
+    {
+      "key": "8126698",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 13:53"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526151.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 14:21"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526150.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 14:21"
+    },
+    {
+      "key": "8126824",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 14:34"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526159.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 14:38"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526161.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 14:52"
+    },
+    {
+      "key": "8126933",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 14:52"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526165.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 14:57"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526167.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 15:05"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526178.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 15:24"
+    },
+    {
+      "key": "https://www.zhitongcaijing.com/content/detail/1526182.html",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 15:28"
+    },
+    {
+      "key": "8127100",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 15:28"
+    },
+    {
+      "key": "8127102",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 15:28"
+    },
+    {
+      "key": "8127169",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-20 15:43"
     }
   ],
   "source_cutoffs": {
-    "智通焦點": 1795141512,
-    "智通7x24": 1795141512
+    "智通焦點": 1795160900,
+    "智通7x24": 1795160900
   }
 }
