@@ -903,7 +903,8 @@
     "8128679",
     "8128664",
     "8128656",
-    "8128659"
+    "8128659",
+    "8131090"
   ],
   "news_seen_links": [
     "https://www.zhitongcaijing.com/content/detail/1525331.html",
@@ -1865,7 +1866,8 @@
     "https://www.zhitongcaijing.com/content/detail/1526532.html",
     "https://www.zhitongcaijing.com/content/detail/1526530.html",
     "https://www.zhitongcaijing.com/content/detail/1526529.html",
-    "https://www.zhitongcaijing.com/content/detail/1526524.html"
+    "https://www.zhitongcaijing.com/content/detail/1526524.html",
+    "https://www.zhitongcaijing.com/content/detail/1526759.html"
   ],
   "analyzed_records": [
     {
@@ -4171,10 +4173,16 @@
       "stock": "",
       "event": "AI_PROCESSED",
       "timestamp": "2026-11-21 06:07"
+    },
+    {
+      "key": "8131090",
+      "stock": "",
+      "event": "AI_PROCESSED",
+      "timestamp": "2026-11-22 04:47"
     }
   ],
   "source_cutoffs": {
-    "智通焦點": 1795227885,
-    "智通7x24": 1795227885
+    "智通焦點": 1795297156,
+    "智通7x24": 1795297156
   }
 }
